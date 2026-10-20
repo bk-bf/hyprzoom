@@ -9,6 +9,7 @@
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 
+#include <unordered_set>
 #include <vector>
 
 class COverview {
@@ -74,6 +75,7 @@ class COverview {
     PHLWORKSPACEREF              m_lastActive;
     PHLWINDOWREF                 m_hovered;
     SDrag                        m_drag;
+    std::unordered_set<uint32_t> m_heldKeys;
 
     PHLANIMVAR<float>            m_progress;
     PHLANIMVAR<float>            m_camera;

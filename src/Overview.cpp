@@ -435,33 +435,26 @@ void COverview::onAxis(const IPointer::SAxisEvent& e, Event::SCallbackInfo& info
 }
 
 void COverview::onKey(const IKeyboard::SKeyEvent& e, Event::SCallbackInfo& info) {
+    if (e.state != WL_KEYBOARD_KEY_STATE_PRESSED) {
+        if (m_heldKeys.erase(e.keycode))
+            info.cancelled = true;
+        return;
+    }
+
     if (m_closing)
         return;
 
-    const bool PRESSED = e.state == WL_KEYBOARD_KEY_STATE_PRESSED;
-
     switch (e.keycode) {
-        case KEY_ESC:
-            if (PRESSED)
-                abort();
-            break;
+        case KEY_ESC: abort(); break;
         case KEY_ENTER:
         case KEY_KPENTER:
-        case KEY_SPACE:
-            if (PRESSED)
-                closeToSelection();
-            break;
-        case KEY_UP:
-            if (PRESSED)
-                select(selectedRow() - 1);
-            break;
-        case KEY_DOWN:
-            if (PRESSED)
-                select(selectedRow() + 1);
-            break;
+        case KEY_SPACE: closeToSelection(); break;
+        case KEY_UP: select(selectedRow() - 1); break;
+        case KEY_DOWN: select(selectedRow() + 1); break;
         default: return;
     }
 
+    m_heldKeys.insert(e.keycode);
     info.cancelled = true;
 }
 
