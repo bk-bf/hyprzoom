@@ -38,6 +38,25 @@ static void      damageOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable>)
         g_pHyprRenderer->damageMonitor(g_pOverview->m_monitor.lock());
 }
 
+class CNoSimplifyPassElement : public IPassElement {
+  public:
+    bool needsLiveBlur() override {
+        return false;
+    }
+    bool needsPrecomputeBlur() override {
+        return false;
+    }
+    const char* passName() override {
+        return "CNoSimplifyPassElement";
+    }
+    ePassElementType type() override {
+        return EK_CUSTOM;
+    }
+    bool disableSimplification() override {
+        return true;
+    }
+};
+
 static void pushModif(float scale, const Vector2D& translatePx) {
     SRenderModifData modif;
     modif.modifs.emplace_back(SRenderModifData::RMOD_TYPE_SCALE, scale);
@@ -194,8 +213,29 @@ COverview::SView COverview::view() const {
     return v;
 }
 
+double COverview::stripCenter(size_t row) const {
+    const auto MONITOR = m_monitor.lock();
+    const auto WS      = row < m_rows.size() ? m_rows[row].lock() : nullptr;
+    double     left = 0.0, right = MONITOR->m_size.x;
+
+    if (WS) {
+        for (const auto& w : Desktop::windowState()->windows()) {
+            if (!w->m_isMapped || w->isHidden() || w->m_workspace != WS)
+                continue;
+
+            const auto BOX = w->getFullWindowBoundingBox();
+            left           = std::min(left, BOX.x - MONITOR->m_position.x);
+            right          = std::max(right, BOX.x + BOX.w - MONITOR->m_position.x);
+        }
+    }
+
+    return (left + right) / 2.0;
+}
+
 Vector2D COverview::rowOrigin(const SView& v, size_t row) const {
-    return v.origin + Vector2D{0.0, row * v.pitch * v.scale};
+    const auto MONITOR = m_monitor.lock();
+    const auto SHIFT   = (MONITOR->m_size.x / 2.0 - stripCenter(row)) * v.scale * m_progress->value();
+    return v.origin + Vector2D{SHIFT, row * v.pitch * v.scale};
 }
 
 int COverview::rowAt(const Vector2D& local) const {
@@ -270,6 +310,8 @@ void COverview::render(const Time::steady_tp& now) {
             select(selectedRow());
         }
     }
+
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CNoSimplifyPassElement>());
 
     const auto V = view();
     const auto P = m_progress->value();
