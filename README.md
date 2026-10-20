@@ -44,7 +44,7 @@ reloads the config right after loading a plugin, so the guarded block runs
 on that second pass.
 
 To try it without touching the config: `hyprctl plugin load "$PWD/hyprzoom.so"`,
-then `hyprctl dispatch hyprzoom:overview toggle`.
+then `hyprctl eval 'hl.plugin.hyprzoom.toggle()'`.
 
 ## Use
 
@@ -70,7 +70,9 @@ selection with it.
 | `hl.plugin.hyprzoom.close()` | |
 | `hl.plugin.hyprzoom.gesture{ fingers, direction, scale? }` | bind a touchpad gesture; `direction` is any `hl.gesture` direction, `pinch` and `up` read naturally |
 
-The dispatcher `hyprzoom:overview` takes `toggle`, `open` or `close`.
+With a hyprlang config, the dispatcher `hyprzoom:overview` takes `toggle`,
+`open` or `close`. With a Lua config, `hyprctl dispatch` expects an
+`hl.dsp` object, so use `hyprctl eval` and the functions above.
 
 ## Config
 
