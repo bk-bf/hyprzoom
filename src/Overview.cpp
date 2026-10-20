@@ -213,29 +213,8 @@ COverview::SView COverview::view() const {
     return v;
 }
 
-double COverview::stripCenter(size_t row) const {
-    const auto MONITOR = m_monitor.lock();
-    const auto WS      = row < m_rows.size() ? m_rows[row].lock() : nullptr;
-    double     left = 0.0, right = MONITOR->m_size.x;
-
-    if (WS) {
-        for (const auto& w : Desktop::windowState()->windows()) {
-            if (!w->m_isMapped || w->isHidden() || w->m_workspace != WS)
-                continue;
-
-            const auto BOX = w->getFullWindowBoundingBox();
-            left           = std::min(left, BOX.x - MONITOR->m_position.x);
-            right          = std::max(right, BOX.x + BOX.w - MONITOR->m_position.x);
-        }
-    }
-
-    return (left + right) / 2.0;
-}
-
 Vector2D COverview::rowOrigin(const SView& v, size_t row) const {
-    const auto MONITOR = m_monitor.lock();
-    const auto SHIFT   = (MONITOR->m_size.x / 2.0 - stripCenter(row)) * v.scale * m_progress->value();
-    return v.origin + Vector2D{SHIFT, row * v.pitch * v.scale};
+    return v.origin + Vector2D{0.0, row * v.pitch * v.scale};
 }
 
 int COverview::rowAt(const Vector2D& local) const {
@@ -278,9 +257,16 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
             if (m_drag.moving && m_drag.window == w)
                 continue;
 
-            g_pHyprRenderer->renderWindow(w, MONITOR, now, true, RENDER_PASS_ALL);
+            const auto BOX   = w->getFullWindowBoundingBox();
+            const auto LOCAL = BOX.pos() - MONITOR->m_position;
+            const auto SHIFT = Vector2D{std::clamp(LOCAL.x, 0.0, std::max(0.0, MONITOR->m_size.x - BOX.w)), std::clamp(LOCAL.y, 0.0, std::max(0.0, MONITOR->m_size.y - BOX.h))} - LOCAL;
+            const auto SAVED = w->m_floatingOffset;
 
-            const auto BOX = w->getFullWindowBoundingBox();
+            pushModif(v.scale, (ORIGIN - SHIFT * v.scale) * MONITOR->m_scale);
+            w->m_floatingOffset = SAVED + SHIFT;
+            g_pHyprRenderer->renderWindow(w, MONITOR, now, true, RENDER_PASS_ALL);
+            w->m_floatingOffset = SAVED;
+
             m_hitboxes.emplace_back(SHitbox{w, CBox{ORIGIN + (BOX.pos() - MONITOR->m_position) * v.scale, BOX.size() * v.scale}});
         }
     }
