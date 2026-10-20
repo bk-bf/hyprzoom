@@ -1,0 +1,23 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel-20261004.0.606936
+    steps:
+      - name: Pin repos to the Arch archive snapshot with Hyprland 0.56.2
+        run: |
+          echo 'Server = https://archive.archlinux.org/repos/2026/10/04/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+          pacman -Syyuu --noconfirm hyprland pango libinput
+      - uses: actions/checkout@v7.0.1
+      - run: pkg-config --modversion hyprland
+      - run: make
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: hyprzoom.so
+          path: hyprzoom.so

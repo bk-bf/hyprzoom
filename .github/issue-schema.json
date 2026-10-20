@@ -1,0 +1,28 @@
+{
+  "labels": {
+    "required": ["type", "severity"],
+    "groups": {
+      "type": ["bug", "feature", "chore", "docs", "decision"],
+      "severity": ["critical", "high", "medium", "low"]
+    },
+    "colors": {
+      "type": "1d76db",
+      "severity": "d93f0b"
+    }
+  },
+  "templates": {
+    "bug": "defect.md",
+    "feature": "feature.md",
+    "decision": "decision.md",
+    "*": "task.md"
+  },
+  "body": {
+    "minProse": 240,
+    "citation": true,
+    "checkbox": true,
+    "checkboxExempt": ["decision"]
+  },
+  "milestones": {
+    "required": false
+  }
+}
