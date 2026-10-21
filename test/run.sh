@@ -159,6 +159,37 @@ check "Esc returns to the start workspace" 1 "$(active_ws)"
 
 ev "hl.plugin.hyprzoom.toggle()"
 sleep 1
+ev "hl.plugin.driver.swipe(3, 0, -400)"
+sleep 1
+shot 07-swiped-up
+check "a 3-finger swipe in the overview leaves the active workspace" 1 "$(active_ws)"
+ev "hl.plugin.driver.swipe(3, 0, 400)"
+sleep 1
+key $KEY_ESC
+sleep 1
+check "Esc after swiping still returns to the start workspace" 1 "$(active_ws)"
+
+ev "hl.plugin.hyprzoom.toggle()"
+sleep 1
+key $KEY_DOWN
+sleep 0.3
+key $KEY_DOWN
+sleep 1
+ev "hl.plugin.driver.move(1200, 450)"
+ev "hl.plugin.driver.button(272, true)"
+ev "hl.plugin.driver.move(1000, 450)"
+ev "hl.plugin.driver.move(460, 450)"
+sleep 0.5
+shot 08-dragging
+ev "hl.plugin.driver.button(272, false)"
+sleep 1.5
+shot 09-dropped
+check "dropping ws4-right left of ws4-left reorders the strip" "ws4-right ws4-left" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map(.class) | join(" ")')"
+key $KEY_ESC
+sleep 1
+
+ev "hl.plugin.hyprzoom.toggle()"
+sleep 1
 key $KEY_DOWN
 sleep 0.3
 key $KEY_DOWN
@@ -167,9 +198,9 @@ key $KEY_RIGHT
 sleep 0.5
 key $KEY_ENTER
 sleep 1.5
-shot 07-entered
+shot 10-entered
 h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
-check "Enter focuses the selected column" ws4-right "$(active_class)"
+check "Enter focuses the selected column" ws4-left "$(active_class)"
 
 exit $((failures > 0))

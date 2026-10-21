@@ -60,7 +60,8 @@ then `hyprctl eval 'hl.plugin.hyprzoom.toggle()'`.
 | sideways scroll | pan the row under the cursor |
 | click a window | go to it |
 | click a workspace | go to it |
-| drag a window onto a workspace | move it there; the outline below the last one makes a new workspace |
+| drag a window | drop it between columns of any workspace to put it there as its own column; the slot below the last workspace makes a new one |
+| swipe (any number of fingers) | up and down moves between workspaces, sideways pans the row; your own swipe gestures wait until the overview closes |
 | `Enter`, `Space` | go to the selected window |
 | `Esc` | go back to where the overview was opened |
 
@@ -92,11 +93,9 @@ Under `plugin.hyprzoom`:
 | `backdrop_blur` | `1` | blur the wallpaper behind the workspaces, with your `decoration.blur` settings |
 | `lane_color` | `0x99282136` | band behind each workspace's row |
 | `frame_color` | `0x2EFFFFFF` | outline of the part of each workspace the monitor shows |
-| `accent_color` | `0xFFCB6FA1` | selected workspace's label and the drop target |
+| `accent_color` | `0xFFCB6FA1` | selected workspace's label, the ring around the selected window, and where a dragged window will land |
 | `label_color` | `0xFF1A1623` | workspace label background |
 | `label_text_color` | `0xFFABB2BF` | workspace label text |
-| `focus_color` | `0x73FFFFFF` | outline of the window `Enter` goes to |
-| `hover_color` | `0xFFFFFFFF` | outline of the window under the cursor |
 | `gesture_distance` | `300` | gesture travel that zooms all the way out |
 
 The zoom follows the `hyprzoom` animation, a child of `workspaces`:

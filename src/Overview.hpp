@@ -45,6 +45,16 @@ class COverview {
         PHLWINDOWREF window;
         CBox         box;
     };
+    struct SSwipe {
+        enum eAxis : uint8_t {
+            AXIS_NONE,
+            AXIS_X,
+            AXIS_Y,
+        };
+        Vector2D travel;
+        eAxis    axis = AXIS_NONE;
+        int      row  = -1;
+    };
 
     struct SDrag {
         PHLWINDOWREF window;
@@ -76,6 +86,13 @@ class COverview {
     void                                                  renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space);
     SP<Render::ITexture>                                  text(const std::string& str, int64_t color, int pt);
     void                                                  drop();
+    std::vector<std::pair<double, double>>                columnsOf(PHLWORKSPACE ws, PHLWINDOW skip) const;
+    static int                                            insertIndex(const std::vector<std::pair<double, double>>& columns, double localX);
+    void                                                  placeColumn(PHLWINDOW window, int index);
+    void                                                  renderRing(const CBox& logical);
+    void                                                  onSwipeBegin(Event::SCallbackInfo& info);
+    void                                                  onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& info);
+    void                                                  onSwipeEnd(Event::SCallbackInfo& info);
 
     void                                                  onMouseMove(Event::SCallbackInfo& info);
     void                                                  onMouseButton(const IPointer::SButtonEvent& e, Event::SCallbackInfo& info);
@@ -90,6 +107,7 @@ class COverview {
     PHLWINDOWREF                                          m_hovered;
     PHLWINDOWREF                                          m_focus;
     SDrag                                                 m_drag;
+    SSwipe                                                m_swipe;
     std::unordered_set<uint32_t>                          m_heldKeys;
     std::unordered_map<WORKSPACEID, PHLANIMVAR<float>>    m_pan;
     std::unordered_map<std::string, SP<Render::ITexture>> m_text;
@@ -107,6 +125,9 @@ class COverview {
     CHyprSignalListener                                   m_mouseButton;
     CHyprSignalListener                                   m_mouseAxis;
     CHyprSignalListener                                   m_key;
+    CHyprSignalListener                                   m_swipeBegin;
+    CHyprSignalListener                                   m_swipeUpdate;
+    CHyprSignalListener                                   m_swipeEnd;
 };
 
 inline UP<COverview> g_pOverview;

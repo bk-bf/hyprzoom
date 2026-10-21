@@ -149,13 +149,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_config.accent          = makeShared<Config::Values::CColorValue>("plugin:hyprzoom:accent_color", "selected workspace's label and the drop target", 0xFFCB6FA1);
     g_config.label           = makeShared<Config::Values::CColorValue>("plugin:hyprzoom:label_color", "workspace label background", 0xFF1A1623);
     g_config.labelText       = makeShared<Config::Values::CColorValue>("plugin:hyprzoom:label_text_color", "workspace label text", 0xFFABB2BF);
-    g_config.focus           = makeShared<Config::Values::CColorValue>("plugin:hyprzoom:focus_color", "outline of the window Enter goes to", 0x73FFFFFF);
-    g_config.hover           = makeShared<Config::Values::CColorValue>("plugin:hyprzoom:hover_color", "outline of the window under the cursor", 0xFFFFFFFF);
     g_config.gestureDistance = makeShared<Config::Values::CIntValue>("plugin:hyprzoom:gesture_distance", "gesture travel that zooms all the way out", 300);
 
-    for (const auto& value :
-         std::initializer_list<SP<Config::Values::IValue>>{g_config.zoom, g_config.gap, g_config.backdrop, g_config.backdropBlur, g_config.lane, g_config.frame, g_config.accent,
-                                                           g_config.label, g_config.labelText, g_config.focus, g_config.hover, g_config.gestureDistance}) {
+    for (const auto& value : std::initializer_list<SP<Config::Values::IValue>>{g_config.zoom, g_config.gap, g_config.backdrop, g_config.backdropBlur, g_config.lane, g_config.frame,
+                                                                               g_config.accent, g_config.label, g_config.labelText, g_config.gestureDistance}) {
         HyprlandAPI::addConfigValueV2(PHANDLE, value);
     }
 

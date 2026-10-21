@@ -32,3 +32,5 @@ hl.config({
 })
 
 hl.animation({ leaf = "workspaces", enabled = true, speed = 3, bezier = "default", style = "slidevert" })
+
+hl.gesture({ fingers = 3, direction = "vertical", action = "workspace" })

@@ -13,7 +13,7 @@
 #include <lua.hpp>
 #include <vector>
 
-inline HANDLE PHANDLE = nullptr;
+inline HANDLE  PHANDLE = nullptr;
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
@@ -75,13 +75,13 @@ class CDriverMouse : public IPointer {
     }
 };
 
-static SP<CDriverKeyboard>                                 g_keyboard;
-static SP<CDriverMouse>                                    g_mouse;
-static std::vector<double>                                 g_frames;
-static std::chrono::steady_clock::time_point               g_lastFrame;
-static bool                                                g_recording = false;
+static SP<CDriverKeyboard>                   g_keyboard;
+static SP<CDriverMouse>                      g_mouse;
+static std::vector<double>                   g_frames;
+static std::chrono::steady_clock::time_point g_lastFrame;
+static bool                                  g_recording = false;
 
-static uint32_t                                            now() {
+static uint32_t                              now() {
     return (uint32_t)Time::millis(Time::steadyNow());
 }
 
@@ -131,6 +131,19 @@ static int luaScroll(lua_State* L) {
     return 0;
 }
 
+static int luaSwipe(lua_State* L) {
+    const auto FINGERS = (uint32_t)luaL_checkinteger(L, 1);
+    const auto DX      = luaL_checknumber(L, 2);
+    const auto DY      = luaL_checknumber(L, 3);
+    const int  STEPS   = 10;
+    g_mouse->m_pointerEvents.swipeBegin.emit(IPointer::SSwipeBeginEvent{.timeMs = now(), .fingers = FINGERS});
+    for (int i = 0; i < STEPS; ++i) {
+        g_mouse->m_pointerEvents.swipeUpdate.emit(IPointer::SSwipeUpdateEvent{.timeMs = now(), .fingers = FINGERS, .delta = Vector2D{DX, DY} / STEPS});
+    }
+    g_mouse->m_pointerEvents.swipeEnd.emit(IPointer::SSwipeEndEvent{.timeMs = now()});
+    return 0;
+}
+
 static int luaRecord(lua_State* L) {
     g_frames.clear();
     g_recording = true;
@@ -167,6 +180,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addLuaFunction(PHANDLE, "driver", "move", ::luaMove);
     HyprlandAPI::addLuaFunction(PHANDLE, "driver", "button", ::luaButton);
     HyprlandAPI::addLuaFunction(PHANDLE, "driver", "scroll", ::luaScroll);
+    HyprlandAPI::addLuaFunction(PHANDLE, "driver", "swipe", ::luaSwipe);
     HyprlandAPI::addLuaFunction(PHANDLE, "driver", "record", ::luaRecord);
     HyprlandAPI::addLuaFunction(PHANDLE, "driver", "frames", ::luaFrames);
 

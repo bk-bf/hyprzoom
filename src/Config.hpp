@@ -16,8 +16,6 @@ struct SHyprzoomConfig {
     SP<Config::Values::CColorValue> accent;
     SP<Config::Values::CColorValue> label;
     SP<Config::Values::CColorValue> labelText;
-    SP<Config::Values::CColorValue> focus;
-    SP<Config::Values::CColorValue> hover;
     SP<Config::Values::CIntValue>   gestureDistance;
 };
 

@@ -9,6 +9,7 @@
 #define private   public
 #define protected public
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/RendererHintsPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
@@ -26,6 +27,9 @@
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>
+#include <hyprland/src/layout/space/Space.hpp>
+#include <hyprland/src/layout/algorithm/Algorithm.hpp>
+#include <hyprland/src/layout/algorithm/tiled/scrolling/ScrollingAlgorithm.hpp>
 #undef private
 #undef protected
 
@@ -33,6 +37,7 @@ using namespace Render;
 
 constexpr double DRAG_THRESHOLD = 8.0;
 constexpr double AXIS_STEP      = 30.0;
+constexpr double SWIPE_LOCK     = 12.0;
 
 static void      damageOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable>) {
     if (g_pOverview && g_pOverview->m_monitor)
@@ -124,6 +129,9 @@ COverview::COverview(PHLMONITOR monitor, bool fromGesture) : m_monitor(monitor) 
     m_mouseButton = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent e, Event::SCallbackInfo& info) { onMouseButton(e, info); });
     m_mouseAxis   = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent e, Event::SCallbackInfo& info) { onAxis(e, info); });
     m_key         = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) { onKey(e, info); });
+    m_swipeBegin  = Event::bus()->m_events.gesture.swipe.begin.listen([this](IPointer::SSwipeBeginEvent, Event::SCallbackInfo& info) { onSwipeBegin(info); });
+    m_swipeUpdate = Event::bus()->m_events.gesture.swipe.update.listen([this](IPointer::SSwipeUpdateEvent e, Event::SCallbackInfo& info) { onSwipeUpdate(e, info); });
+    m_swipeEnd    = Event::bus()->m_events.gesture.swipe.end.listen([this](IPointer::SSwipeEndEvent, Event::SCallbackInfo& info) { onSwipeEnd(info); });
 
     Log::logger->log(Log::DEBUG, "[hyprzoom] open on {} at workspace {}, {} rows, gesture {}", monitor->m_name, monitor->activeWorkspaceID(), m_rows.size(), fromGesture);
 
@@ -495,18 +503,26 @@ void COverview::render(const Time::steady_tp& now) {
 
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
         const auto TARGET = rowAt(m_cursor);
-        if (TARGET != m_drag.row && TARGET < (int)m_rows.size())
-            renderOutline(frameBox(V, TARGET), withAlpha(g_config.accent->value(), P), 3.0);
+        if (TARGET < (int)m_rows.size()) {
+            const auto WS    = m_rows[TARGET].lock();
+            const auto STRIP = rowOrigin(V, TARGET) - Vector2D{pan(TARGET) * V.scale, 0.0};
+            const auto COLS  = columnsOf(WS, m_drag.window.lock());
+            const auto INDEX = insertIndex(COLS, (m_cursor.x - STRIP.x) / V.scale);
+            const auto GAP   = COLS.empty() ? 0.0 : INDEX == 0 ? COLS.front().first : COLS[INDEX - 1].second;
+            const auto FRAME = frameBox(V, TARGET);
+            const auto MS    = MONITOR->m_scale;
+            const auto WIDTH = std::round(4 * MS);
+            addRect(CBox{(STRIP.x + GAP * V.scale) * MS - WIDTH / 2.0, FRAME.y * MS, WIDTH, FRAME.h * MS}.round(), withAlpha(g_config.accent->value(), P), WIDTH / 2);
+        }
 
         renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
         popModif();
     }
 
+    const auto RING = m_hovered ? m_hovered : m_focus;
     for (const auto& hb : m_hitboxes) {
-        if (m_focus && hb.window == m_focus && !m_drag.moving)
-            renderOutline(hb.box, withAlpha(g_config.focus->value(), P), 2.0);
-        if (m_hovered && hb.window == m_hovered && P > 0.5F && !m_drag.moving)
-            renderOutline(hb.box, withAlpha(g_config.hover->value(), P), 3.0);
+        if (RING && hb.window == RING && !m_drag.moving)
+            renderRing(hb.box);
     }
 
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_TOP, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY}, now);
@@ -609,17 +625,142 @@ void COverview::drop() {
     } else
         target = m_rows[ROW].lock();
 
-    if (!target || target == W->m_workspace)
+    if (!target)
         return;
 
-    Log::logger->log(Log::DEBUG, "[hyprzoom] move {} to workspace {}", W->m_title, target->m_id);
+    int index = -1;
+    if (ROW < (int)m_rows.size()) {
+        const auto V     = view();
+        const auto STRIP = rowOrigin(V, ROW) - Vector2D{pan(ROW) * V.scale, 0.0};
+        index            = insertIndex(columnsOf(target, W), (m_cursor.x - STRIP.x) / V.scale);
+    }
 
-    const auto RESULT = Config::Actions::moveToWorkspace(target, true, W);
-    if (!RESULT)
-        Log::logger->log(Log::ERR, "[hyprzoom] moving {} failed", W->m_title);
+    if (target != W->m_workspace) {
+        Log::logger->log(Log::DEBUG, "[hyprzoom] move {} to workspace {}", W->m_title, target->m_id);
+
+        const auto RESULT = Config::Actions::moveToWorkspace(target, true, W);
+        if (!RESULT)
+            Log::logger->log(Log::ERR, "[hyprzoom] moving {} failed", W->m_title);
+    }
+
+    if (index >= 0 && W->m_workspace == target)
+        placeColumn(W, index);
 
     refreshRows();
     showAllRows();
+}
+
+std::vector<std::pair<double, double>> COverview::columnsOf(PHLWORKSPACE ws, PHLWINDOW skip) const {
+    const auto                             MONITOR = m_monitor.lock();
+    std::vector<std::pair<double, double>> columns;
+
+    for (const auto& w : Desktop::windowState()->windows()) {
+        if (!w->m_isMapped || w->isHidden() || w->m_workspace != ws || w->m_isFloating || w == skip)
+            continue;
+
+        const auto LEFT  = std::round(w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x - MONITOR->m_position.x);
+        const auto RIGHT = LEFT + w->size(Desktop::View::IGeometric::GEOMETRIC_GOAL).x;
+        if (std::ranges::none_of(columns, [LEFT](const auto& c) { return c.first == LEFT; }))
+            columns.emplace_back(LEFT, RIGHT);
+    }
+
+    std::ranges::sort(columns);
+    return columns;
+}
+
+int COverview::insertIndex(const std::vector<std::pair<double, double>>& columns, double localX) {
+    return (int)std::ranges::count_if(columns, [localX](const auto& c) { return (c.first + c.second) / 2.0 < localX; });
+}
+
+void COverview::placeColumn(PHLWINDOW window, int index) {
+    if (!window->m_workspace || !window->m_workspace->m_space || !window->m_workspace->m_space->algorithm())
+        return;
+
+    const auto ALGO = dynamic_cast<Layout::Tiled::CScrollingAlgorithm*>(window->m_workspace->m_space->algorithm()->tiledAlgo().get());
+    if (!ALGO)
+        return;
+
+    const auto& DATA  = ALGO->m_scrollingData;
+    const auto  TDATA = ALGO->dataFor(window->layoutTarget());
+    const auto  SRC   = TDATA ? TDATA->column.lock() : nullptr;
+    if (!SRC)
+        return;
+
+    if (SRC->targetDatas.size() > 1) {
+        index          = std::clamp(index, 0, (int)DATA->columns.size());
+        const auto COL = DATA->add(index - 1);
+        SRC->remove(window->layoutTarget());
+        COL->add(TDATA);
+    } else {
+        int current = (int)DATA->idx(SRC);
+        index       = std::clamp(index, 0, (int)DATA->columns.size() - 1);
+        while (current != index) {
+            const int NEXT = current + (index > current ? 1 : -1);
+            std::swap(DATA->columns.at(current), DATA->columns.at(NEXT));
+            DATA->controller->swapStrips(current, NEXT);
+            current = NEXT;
+        }
+    }
+
+    DATA->recalculate();
+    Log::logger->log(Log::DEBUG, "[hyprzoom] placed {} at column {}", window->m_title, index);
+}
+
+void COverview::renderRing(const CBox& logical) {
+    const auto                      MS = m_monitor->m_scale;
+
+    CBorderPassElement::SBorderData data;
+    data.box        = logical.copy().scale(MS).round();
+    data.grad1      = Config::CGradientValueData{withAlpha(g_config.accent->value(), m_progress->value())};
+    data.borderSize = std::round(3 * MS);
+    data.round      = 0;
+    data.outerRound = std::round(6 * MS);
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(data));
+}
+
+void COverview::onSwipeBegin(Event::SCallbackInfo& info) {
+    if (m_closing)
+        return;
+
+    info.cancelled = true;
+    m_swipe        = {};
+}
+
+void COverview::onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& info) {
+    if (m_closing)
+        return;
+
+    info.cancelled = true;
+    m_swipe.travel = m_swipe.travel + e.delta;
+
+    if (m_swipe.axis == SSwipe::AXIS_NONE) {
+        if (m_swipe.travel.size() < SWIPE_LOCK)
+            return;
+        m_swipe.axis = std::abs(m_swipe.travel.x) > std::abs(m_swipe.travel.y) ? SSwipe::AXIS_X : SSwipe::AXIS_Y;
+        m_swipe.row  = rowAt(m_cursor) < (int)m_rows.size() ? rowAt(m_cursor) : selectedRow();
+    }
+
+    const auto V = view();
+    if (m_swipe.axis == SSwipe::AXIS_X) {
+        if (m_swipe.row >= 0)
+            panBy(m_swipe.row, -e.delta.x / V.scale);
+        return;
+    }
+
+    const auto LAST = std::max(0.0, (double)m_rows.size() - 1);
+    m_camera->setValueAndWarp(std::clamp(m_camera->value() - e.delta.y / (V.pitch * V.scale), -0.5, LAST + 0.5));
+}
+
+void COverview::onSwipeEnd(Event::SCallbackInfo& info) {
+    if (m_closing)
+        return;
+
+    info.cancelled = true;
+
+    if (m_swipe.axis == SSwipe::AXIS_Y)
+        select((int)std::lround(m_camera->value()));
+
+    m_swipe = {};
 }
 
 void COverview::onAxis(const IPointer::SAxisEvent& e, Event::SCallbackInfo& info) {
@@ -663,10 +804,22 @@ void COverview::onKey(const IKeyboard::SKeyEvent& e, Event::SCallbackInfo& info)
         case KEY_ENTER:
         case KEY_KPENTER:
         case KEY_SPACE: closeToSelection(); break;
-        case KEY_UP: select(selectedRow() - 1); break;
-        case KEY_DOWN: select(selectedRow() + 1); break;
-        case KEY_LEFT: focusColumn(-1); break;
-        case KEY_RIGHT: focusColumn(1); break;
+        case KEY_UP:
+            m_hovered.reset();
+            select(selectedRow() - 1);
+            break;
+        case KEY_DOWN:
+            m_hovered.reset();
+            select(selectedRow() + 1);
+            break;
+        case KEY_LEFT:
+            m_hovered.reset();
+            focusColumn(-1);
+            break;
+        case KEY_RIGHT:
+            m_hovered.reset();
+            focusColumn(1);
+            break;
         default: return;
     }
 
