@@ -17,6 +17,11 @@ KEY_DOWN=108
 failures=0
 summary="$OUT/summary.md"
 : >"$summary"
+echo "| check | expected | actual | |" >"$OUT/checks.md"
+echo "|---|---|---|---|" >>"$OUT/checks.md"
+echo "| step | frames | median ms | p95 ms | max ms |" >"$OUT/frames.md"
+echo "|---|---|---|---|---|" >>"$OUT/frames.md"
+: >"$OUT/shots.md"
 
 h() { hyprctl -i 0 "$@"; }
 ev() {
@@ -51,10 +56,12 @@ frames() {
     local name=$1
     ev "hl.plugin.driver.frames('$OUT/frames-$name.txt')"
     sort -n "$OUT/frames-$name.txt" | awk -v name="$name" '
-        { v[NR] = $1; s += $1 }
+        { v[NR] = $1 }
         END {
             if (NR == 0) { printf "| %s | 0 | - | - | - |\n", name; exit }
-            printf "| %s | %d | %.1f | %.1f | %.1f |\n", name, NR, v[int((NR + 1) / 2)], v[int(NR * 0.95 + 0.5) > 0 ? int(NR * 0.95 + 0.5) : 1], v[NR]
+            p = int(NR * 0.95 + 0.5)
+            if (p < 1) p = 1
+            printf "| %s | %d | %.1f | %.1f | %.1f |\n", name, NR, v[int((NR + 1) / 2)], v[p], v[NR]
         }' >>"$OUT/frames.md"
 }
 record() { ev "hl.plugin.driver.record()"; }
@@ -71,7 +78,17 @@ active_class() { h activewindow -j | jq -r .class; }
 
 LIBSEAT_BACKEND=noop AQ_DRM_DEVICES=/dev/dri/card0 Hyprland --config "$HERE/hyprland.lua" >"$OUT/hyprland.log" 2>&1 &
 HYPRLAND=$!
-trap 'kill $HYPRLAND 2>/dev/null || true' EXIT
+finish() {
+    {
+        echo "## Checks"
+        cat "$OUT/checks.md"
+        echo
+        echo "## Frame intervals while open"
+        cat "$OUT/frames.md"
+    } >"$summary"
+    kill $HYPRLAND 2>/dev/null || true
+}
+trap finish EXIT
 
 wait_for "h version >/dev/null 2>&1"
 h output create headless HEADLESS-1 >/dev/null
@@ -93,11 +110,6 @@ dispatch "hl.dsp.focus({ window = 'class:ws4-left' })"
 dispatch "hl.dsp.focus({ workspace = '1' })"
 sleep 1
 
-echo "| check | expected | actual | |" >"$OUT/checks.md"
-echo "|---|---|---|---|" >>"$OUT/checks.md"
-echo "| step | frames | median ms | p95 ms | max ms |" >"$OUT/frames.md"
-echo "|---|---|---|---|---|" >>"$OUT/frames.md"
-: >"$OUT/shots.md"
 
 shot 00-desktop
 
@@ -153,13 +165,5 @@ sleep 1.5
 shot 07-entered
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
 check "Enter focuses the selected column" ws4-right "$(active_class)"
-
-{
-    echo "## Checks"
-    cat "$OUT/checks.md"
-    echo
-    echo "## Frame intervals while open"
-    cat "$OUT/frames.md"
-} >"$summary"
 
 exit $((failures > 0))
