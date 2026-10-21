@@ -97,6 +97,8 @@ drag() {
 
 order_x() { h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map("\(.class) \(.size[0])") | join(" ")'; }
 
+on_screen() { h clients -j | jq -r --arg c "$1" '.[] | select(.class == $c) | .at[0]'; }
+
 active_ws() { h activeworkspace -j | jq -r .id; }
 active_class() { h activewindow -j | jq -r .class; }
 
@@ -259,6 +261,7 @@ ev "hl.plugin.driver.move(724, 452)"
 sleep 0.5
 shot 12-same-workspace
 check "Enter on another window of the same workspace keeps it focused" ws4-left "$(active_class)"
+check "Enter on another window of the same workspace scrolls it into view" 0 "$(on_screen ws4-left)"
 
 dispatch "hl.dsp.focus({ window = 'class:ws4-right' })"
 sleep 1
@@ -277,5 +280,6 @@ ev "hl.plugin.driver.move(564, 452)"
 sleep 0.5
 shot 13-clicked
 check "clicking another window of the same workspace keeps it focused" ws4-left "$(active_class)"
+check "clicking another window of the same workspace scrolls it into view" 0 "$(on_screen ws4-left)"
 
 exit $((failures > 0))
