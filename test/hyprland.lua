@@ -28,7 +28,7 @@ hl.config({
 
     animations = { enabled = true },
 
-    debug = { disable_logs = false },
+    debug = { disable_logs = false, enable_stdout_logs = true },
 })
 
 hl.animation({ leaf = "workspaces", enabled = true, speed = 3, bezier = "default", style = "slidevert" })
