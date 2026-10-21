@@ -1,4 +1,4 @@
-hl.monitor({ output = "HEADLESS-1", mode = "2880x1800@60", position = "0x0", scale = 2 })
+hl.monitor({ output = "HEADLESS-1", mode = "2880x1800@60", position = "0x0", scale = 2, reserved = "30 0 0 0" })
 hl.monitor({ output = "", disabled = true })
 
 hl.config({

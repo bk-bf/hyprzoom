@@ -21,7 +21,6 @@ echo "| check | expected | actual | |" >"$OUT/checks.md"
 echo "|---|---|---|---|" >>"$OUT/checks.md"
 echo "| step | frames | median ms | p95 ms | max ms |" >"$OUT/frames.md"
 echo "|---|---|---|---|---|" >>"$OUT/frames.md"
-: >"$OUT/shots.md"
 
 h() { hyprctl -i 0 "$@"; }
 ev() {
@@ -31,7 +30,10 @@ ev() {
 }
 dispatch() { ev "hl.dispatch($1)"; }
 key() { ev "hl.plugin.driver.key($1)"; }
-shot() { grim -s 0.5 "$OUT/$1.png"; echo "![$1]($1.png)" >>"$OUT/shots.md"; }
+shot() {
+    grim -s 0.5 "$OUT/$1.png"
+    grim -g "400,240 640x420" "$OUT/$1-row.png"
+}
 
 wait_for() {
     for _ in $(seq 100); do
@@ -164,6 +166,7 @@ sleep 0.5
 key $KEY_ENTER
 sleep 1.5
 shot 07-entered
+h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
 check "Enter focuses the selected column" ws4-right "$(active_class)"
 
