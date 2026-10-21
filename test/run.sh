@@ -69,7 +69,7 @@ record() { ev "hl.plugin.driver.record()"; }
 spawn() {
     local ws=$1 cls=$2 color=$3
     dispatch "hl.dsp.focus({ workspace = '$ws' })"
-    dispatch "hl.dsp.exec_cmd([[foot -a $cls -o colors.background=$color -o main.font=monospace:size=28 sh -c 'echo $cls; exec sleep 3600']])"
+    dispatch "hl.dsp.exec_cmd([[foot -a $cls -o colors-dark.background=$color -o main.font=monospace:size=28 sh -c 'echo $cls; exec sleep 3600']])"
     wait_for "h clients -j | jq -e '.[] | select(.class == \"$cls\")' >/dev/null"
 }
 

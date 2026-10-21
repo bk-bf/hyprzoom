@@ -210,8 +210,17 @@ void COverview::select(int row) {
 }
 
 double COverview::pan(size_t row) const {
-    const auto IT = m_panShown.find(m_rows[row]->m_id);
-    return IT == m_panShown.end() ? 0.0 : IT->second;
+    const auto IT = m_pan.find(m_rows[row]->m_id);
+    return IT == m_pan.end() ? 0.0 : IT->second->value();
+}
+
+PHLANIMVAR<float>& COverview::panVar(WORKSPACEID id) {
+    auto& var = m_pan[id];
+    if (!var) {
+        Animation::mgr()->createAnimation(0.F, var, Config::animationTree()->getAnimationPropertyConfig("hyprzoom"), AVARDAMAGE_NONE);
+        var->setUpdateCallback(damageOverview);
+    }
+    return var;
 }
 
 void COverview::panBy(size_t row, double delta) {
@@ -222,12 +231,11 @@ void COverview::panBy(size_t row, double delta) {
 
     for (const auto& w : Desktop::windowState()->windows()) {
         if (w->m_isMapped && !w->isHidden() && w->m_workspace == WS)
-            right = std::max(right, w->getFullWindowBoundingBox().x + w->getFullWindowBoundingBox().w - MONITOR->m_position.x);
+            right = std::max(right, w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x + w->size(Desktop::View::IGeometric::GEOMETRIC_GOAL).x - MONITOR->m_position.x);
     }
 
-    const auto VALUE     = std::clamp(m_pan[WS->m_id] + delta, -W / 2.0, std::max(0.0, right - W / 2.0));
-    m_pan[WS->m_id]      = VALUE;
-    m_panShown[WS->m_id] = VALUE;
+    auto& var = panVar(WS->m_id);
+    var->setValueAndWarp(std::clamp(var->goal() + delta, -W / 2.0, std::max(0.0, right - W / 2.0)));
 }
 
 void COverview::focusColumn(int dir) {
@@ -277,14 +285,15 @@ void COverview::keepFocusVisible() {
     if (!MONITOR || !W || !W->m_workspace)
         return;
 
-    const auto BOX  = W->getFullWindowBoundingBox();
-    const auto LEFT = BOX.x - MONITOR->m_position.x;
-    auto&      p    = m_pan[W->m_workspace->m_id];
+    const auto LEFT  = W->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x - MONITOR->m_position.x;
+    const auto WIDTH = W->size(Desktop::View::IGeometric::GEOMETRIC_GOAL).x;
+    auto&      var   = panVar(W->m_workspace->m_id);
+    const auto P     = var->goal();
 
-    if (LEFT < p)
-        p = LEFT;
-    else if (LEFT + BOX.w > p + MONITOR->m_size.x)
-        p = LEFT + BOX.w - MONITOR->m_size.x;
+    if (LEFT < P)
+        *var = LEFT;
+    else if (LEFT + WIDTH > P + MONITOR->m_size.x)
+        *var = LEFT + WIDTH - MONITOR->m_size.x;
 }
 
 bool COverview::closing() const {
@@ -367,8 +376,9 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
 
             renderWindowAt(w, STRIP, v.scale, now);
 
-            const auto BOX = w->getFullWindowBoundingBox();
-            m_hitboxes.emplace_back(SHitbox{w, CBox{STRIP + (BOX.pos() - MONITOR->m_position) * v.scale, BOX.size() * v.scale}});
+            const auto POS  = w->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT) - MONITOR->m_position;
+            const auto SIZE = w->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+            m_hitboxes.emplace_back(SHitbox{w, CBox{STRIP + POS * v.scale, SIZE * v.scale}});
         }
     }
 
@@ -468,14 +478,6 @@ void COverview::render(const Time::steady_tp& now) {
     const auto V = view();
     const auto P = m_progress->value();
 
-    for (auto& [id, shown] : m_panShown) {
-        const auto TARGET = m_pan[id];
-        shown             = std::abs(TARGET - shown) < 0.5 ? TARGET : shown + (TARGET - shown) * 0.25;
-    }
-    for (const auto& [id, target] : m_pan) {
-        m_panShown.try_emplace(id, 0.0);
-    }
-
     g_pHyprRenderer->renderBackground(MONITOR);
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM}, now);
     addRect({{0, 0}, MONITOR->m_pixelSize}, withAlpha(g_config.backdrop->value(), P), 0, g_config.backdropBlur->value() && P > 0.F, P);
@@ -513,7 +515,10 @@ void COverview::onPreRender(PHLMONITOR monitor) {
     if (monitor != m_monitor)
         return;
 
-    g_pHyprRenderer->damageMonitor(monitor);
+    g_pEventLoopManager->doLater([ref = PHLMONITORREF{monitor}] {
+        if (g_pOverview && ref)
+            g_pHyprRenderer->damageMonitor(ref.lock());
+    });
 }
 
 void COverview::onMouseMove(Event::SCallbackInfo& info) {

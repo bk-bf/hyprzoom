@@ -63,6 +63,7 @@ class COverview {
     void                                                  select(int row);
     int                                                   selectedRow() const;
     double                                                pan(size_t row) const;
+    PHLANIMVAR<float>&                                    panVar(WORKSPACEID id);
     void                                                  panBy(size_t row, double delta);
     void                                                  focusColumn(int dir);
     void                                                  keepFocusVisible();
@@ -89,8 +90,7 @@ class COverview {
     PHLWINDOWREF                                          m_focus;
     SDrag                                                 m_drag;
     std::unordered_set<uint32_t>                          m_heldKeys;
-    std::unordered_map<WORKSPACEID, double>               m_pan;
-    std::unordered_map<WORKSPACEID, double>               m_panShown;
+    std::unordered_map<WORKSPACEID, PHLANIMVAR<float>>    m_pan;
     std::unordered_map<std::string, SP<Render::ITexture>> m_text;
 
     PHLANIMVAR<float>                                     m_progress;
