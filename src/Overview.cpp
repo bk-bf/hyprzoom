@@ -502,6 +502,8 @@ void COverview::render(const Time::steady_tp& now) {
         renderNewSlot(V);
 
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
+        renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
+        popModif();
         const auto TARGET = rowAt(m_cursor);
         if (TARGET < (int)m_rows.size()) {
             const auto WS    = m_rows[TARGET].lock();
@@ -514,9 +516,6 @@ void COverview::render(const Time::steady_tp& now) {
             const auto WIDTH = std::round(4 * MS);
             addRect(CBox{(STRIP.x + GAP * V.scale) * MS - WIDTH / 2.0, FRAME.y * MS, WIDTH, FRAME.h * MS}.round(), withAlpha(g_config.accent->value(), P), WIDTH / 2);
         }
-
-        renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
-        popModif();
     }
 
     const auto RING = m_hovered ? m_hovered : m_focus;
@@ -712,7 +711,7 @@ void COverview::renderRing(const CBox& logical) {
     CBorderPassElement::SBorderData data;
     data.box        = logical.copy().scale(MS).round();
     data.grad1      = Config::CGradientValueData{withAlpha(g_config.accent->value(), m_progress->value())};
-    data.borderSize = std::round(3 * MS);
+    data.borderSize = 3;
     data.round      = 0;
     data.outerRound = std::round(6 * MS);
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(data));
