@@ -11,6 +11,7 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/RendererHintsPassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
@@ -68,13 +69,16 @@ static void popModif() {
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{SRenderModifData{}}));
 }
 
-static void addRect(const CBox& px, const CHyprColor& color) {
-    if (color.a <= 0.F || px.w <= 0 || px.h <= 0)
+static void addRect(const CBox& px, const CHyprColor& color, int round = 0, bool blur = false, float blurA = 1.F) {
+    if ((color.a <= 0.F && !blur) || px.w <= 0 || px.h <= 0)
         return;
 
     CRectPassElement::SRectData data;
     data.box   = px;
     data.color = color;
+    data.round = round;
+    data.blur  = blur;
+    data.blurA = blurA;
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
@@ -106,6 +110,7 @@ COverview::COverview(PHLMONITOR monitor, bool fromGesture) : m_monitor(monitor) 
     Animation::mgr()->createAnimation((float)std::max(0, selectedRow()), m_camera, CONFIG, AVARDAMAGE_NONE);
     m_progress->setUpdateCallback(damageOverview);
     m_camera->setUpdateCallback(damageOverview);
+    select(selectedRow());
 
     if (fromGesture)
         gestureBegin();
@@ -191,9 +196,95 @@ void COverview::select(int row) {
     if (m_rows.empty())
         return;
 
-    row        = std::clamp(row, 0, (int)m_rows.size() - 1);
+    row = std::clamp(row, 0, (int)m_rows.size() - 1);
+    if (m_rows[row] != m_selected || !m_focus || m_focus->m_workspace != m_rows[row]) {
+        const auto WS = m_rows[row].lock();
+        m_focus       = WS->getLastFocusedWindow();
+        if (!m_focus || m_focus->m_workspace != WS)
+            m_focus.reset();
+    }
+
     m_selected = m_rows[row];
     *m_camera  = (float)row;
+    keepFocusVisible();
+}
+
+double COverview::pan(size_t row) const {
+    const auto IT = m_panShown.find(m_rows[row]->m_id);
+    return IT == m_panShown.end() ? 0.0 : IT->second;
+}
+
+void COverview::panBy(size_t row, double delta) {
+    const auto MONITOR = m_monitor.lock();
+    const auto WS      = m_rows[row].lock();
+    const auto W       = MONITOR->m_size.x;
+    double     right   = W;
+
+    for (const auto& w : Desktop::windowState()->windows()) {
+        if (w->m_isMapped && !w->isHidden() && w->m_workspace == WS)
+            right = std::max(right, w->getFullWindowBoundingBox().x + w->getFullWindowBoundingBox().w - MONITOR->m_position.x);
+    }
+
+    const auto VALUE     = std::clamp(m_pan[WS->m_id] + delta, -W / 2.0, std::max(0.0, right - W / 2.0));
+    m_pan[WS->m_id]      = VALUE;
+    m_panShown[WS->m_id] = VALUE;
+}
+
+void COverview::focusColumn(int dir) {
+    const auto WS      = m_selected.lock();
+    const auto MONITOR = m_monitor.lock();
+    if (!WS)
+        return;
+
+    std::vector<PHLWINDOW> tiled;
+    for (const auto& w : Desktop::windowState()->windows()) {
+        if (w->m_isMapped && !w->isHidden() && w->m_workspace == WS && !w->m_isFloating)
+            tiled.emplace_back(w);
+    }
+
+    if (tiled.empty())
+        return;
+
+    std::vector<double> columns;
+    for (const auto& w : tiled) {
+        columns.emplace_back(std::round(w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x));
+    }
+    std::ranges::sort(columns);
+    const auto [first, last] = std::ranges::unique(columns);
+    columns.erase(first, last);
+
+    int current = -1;
+    if (m_focus && m_focus->m_workspace == WS && !m_focus->m_isFloating) {
+        const auto X = std::round(m_focus->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x);
+        current      = (int)(std::ranges::find(columns, X) - columns.begin());
+    }
+
+    const int TARGET = current < 0 ? 0 : std::clamp(current + dir, 0, (int)columns.size() - 1);
+    PHLWINDOW best;
+    for (const auto& w : tiled) {
+        const auto POS = w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+        if (std::round(POS.x) == columns[TARGET] && (!best || POS.y < best->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).y))
+            best = w;
+    }
+
+    m_focus = best;
+    keepFocusVisible();
+}
+
+void COverview::keepFocusVisible() {
+    const auto MONITOR = m_monitor.lock();
+    const auto W       = m_focus.lock();
+    if (!MONITOR || !W || !W->m_workspace)
+        return;
+
+    const auto BOX  = W->getFullWindowBoundingBox();
+    const auto LEFT = BOX.x - MONITOR->m_position.x;
+    auto&      p    = m_pan[W->m_workspace->m_id];
+
+    if (LEFT < p)
+        p = LEFT;
+    else if (LEFT + BOX.w > p + MONITOR->m_size.x)
+        p = LEFT + BOX.w - MONITOR->m_size.x;
 }
 
 bool COverview::closing() const {
@@ -236,17 +327,34 @@ void COverview::renderOutline(const CBox& logical, const CHyprColor& color, doub
     addRect({B.x + B.w - T, B.y + T, T, B.h - 2 * T}, color);
 }
 
+void COverview::renderWindowAt(PHLWINDOW window, const Vector2D& origin, float scale, const Time::steady_tp& now) {
+    const auto MONITOR = m_monitor.lock();
+    const auto BOX     = window->getFullWindowBoundingBox();
+    const auto LOCAL   = BOX.pos() - MONITOR->m_position;
+    const auto SHIFT   = Vector2D{std::clamp(LOCAL.x, 0.0, std::max(0.0, MONITOR->m_size.x - BOX.w)), std::clamp(LOCAL.y, 0.0, std::max(0.0, MONITOR->m_size.y - BOX.h))} - LOCAL;
+    const auto SAVED   = window->m_floatingOffset;
+
+    pushModif(scale, (origin - SHIFT * scale) * MONITOR->m_scale);
+    window->m_floatingOffset = SAVED + SHIFT;
+    g_pHyprRenderer->renderWindow(window, MONITOR, now, true, RENDER_PASS_ALL);
+    window->m_floatingOffset = SAVED;
+}
+
 void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now) {
     const auto MONITOR = m_monitor.lock();
     const auto WS      = m_rows[row].lock();
     const auto ORIGIN  = rowOrigin(v, row);
+    const auto STRIP   = ORIGIN - Vector2D{pan(row) * v.scale, 0.0};
     const CBox FRAME   = {ORIGIN, MONITOR->m_size * v.scale};
+    const auto P       = m_progress->value();
+    const auto MS      = MONITOR->m_scale;
 
     if (FRAME.y > MONITOR->m_size.y || FRAME.y + FRAME.h < 0)
         return;
 
-    pushModif(v.scale, ORIGIN * MONITOR->m_scale);
+    addRect(CBox{0.0, FRAME.y * MS, MONITOR->m_pixelSize.x, FRAME.h * MS}.round(), withAlpha(g_config.lane->value(), P));
 
+    pushModif(v.scale, ORIGIN * MS);
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND}, now);
 
     for (const bool FLOATING : {false, true}) {
@@ -257,28 +365,86 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
             if (m_drag.moving && m_drag.window == w)
                 continue;
 
-            const auto BOX   = w->getFullWindowBoundingBox();
-            const auto LOCAL = BOX.pos() - MONITOR->m_position;
-            const auto SHIFT = Vector2D{std::clamp(LOCAL.x, 0.0, std::max(0.0, MONITOR->m_size.x - BOX.w)), std::clamp(LOCAL.y, 0.0, std::max(0.0, MONITOR->m_size.y - BOX.h))} - LOCAL;
-            const auto SAVED = w->m_floatingOffset;
+            renderWindowAt(w, STRIP, v.scale, now);
 
-            pushModif(v.scale, (ORIGIN - SHIFT * v.scale) * MONITOR->m_scale);
-            w->m_floatingOffset = SAVED + SHIFT;
-            g_pHyprRenderer->renderWindow(w, MONITOR, now, true, RENDER_PASS_ALL);
-            w->m_floatingOffset = SAVED;
-
-            m_hitboxes.emplace_back(SHitbox{w, CBox{ORIGIN + (BOX.pos() - MONITOR->m_position) * v.scale, BOX.size() * v.scale}});
+            const auto BOX = w->getFullWindowBoundingBox();
+            m_hitboxes.emplace_back(SHitbox{w, CBox{STRIP + (BOX.pos() - MONITOR->m_position) * v.scale, BOX.size() * v.scale}});
         }
     }
 
     popModif();
 
-    const auto P     = m_progress->value();
-    const auto COLOR = (int)row == selectedRow() ? g_config.selected->value() : g_config.frame->value();
-    renderOutline(FRAME, withAlpha(COLOR, P), 2.0);
+    renderOutline(FRAME, withAlpha(g_config.frame->value(), P), 1.5);
+    renderLabel(FRAME, WS->m_name, (int)row == selectedRow());
 
     if (WS != MONITOR->m_activeWorkspace)
         g_pHyprRenderer->sendFrameEventsToWorkspace(MONITOR, WS, now);
+}
+
+SP<Render::ITexture> COverview::text(const std::string& str, int64_t color, int pt) {
+    const auto KEY = std::format("{}|{}|{}", str, color, pt);
+    auto&      tex = m_text[KEY];
+    if (!tex)
+        tex = g_pHyprRenderer->renderText(str, CHyprColor{(uint64_t)color}, pt, false, "", 0, 600);
+    return tex;
+}
+
+void COverview::renderLabel(const CBox& frame, const std::string& str, bool selected) {
+    const auto MS  = m_monitor->m_scale;
+    const auto P   = m_progress->value();
+    const auto TEX = text(str, selected ? g_config.label->value() : g_config.labelText->value(), std::round(13 * MS));
+    if (!TEX || P <= 0.F)
+        return;
+
+    const Vector2D PAD  = Vector2D{9, 5} * MS;
+    const Vector2D SIZE = TEX->m_size + PAD * 2;
+    const CBox     PILL = CBox{frame.x * MS - 14 * MS - SIZE.x, frame.y * MS, SIZE.x, SIZE.y}.round();
+
+    addRect(PILL, withAlpha(selected ? g_config.accent->value() : g_config.label->value(), P), std::round(7 * MS));
+
+    CTexPassElement::SRenderData data;
+    data.tex = TEX;
+    data.box = CBox{PILL.pos() + PAD, TEX->m_size}.round();
+    data.a   = P;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
+}
+
+void COverview::renderNewSlot(const SView& v) {
+    const auto MS    = m_monitor->m_scale;
+    const auto P     = m_progress->value();
+    const CBox FRAME = {rowOrigin(v, m_rows.size()), m_monitor->m_size * v.scale};
+    const bool DROP  = m_drag.moving && rowAt(m_cursor) >= (int)m_rows.size();
+    const auto COLOR = DROP ? g_config.accent->value() : g_config.labelText->value();
+
+    renderDashed(FRAME, withAlpha(COLOR, P * (DROP ? 1.F : 0.4F)), 2.0, 12.0, 8.0);
+
+    const auto ZOOM = std::clamp((float)g_config.zoom->value(), 0.05F, 1.F);
+    const auto TEX  = text("+", COLOR, std::round(160 * ZOOM * MS));
+    if (!TEX)
+        return;
+
+    const auto                   SIZE = TEX->m_size * (v.scale / ZOOM);
+    CTexPassElement::SRenderData data;
+    data.tex = TEX;
+    data.box = CBox{FRAME.middle() * MS - SIZE / 2.0, SIZE}.round();
+    data.a   = P * (DROP ? 1.F : 0.4F);
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
+}
+
+void COverview::renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space) {
+    const auto S = m_monitor->m_scale;
+    const CBox B = logical.copy().scale(S).round();
+    const auto T = std::max(1.0, std::round(width * S));
+    const auto D = dash * S, STEP = (dash + space) * S;
+
+    for (double x = 0; x < B.w; x += STEP) {
+        addRect(CBox{B.x + x, B.y, std::min(D, B.w - x), T}.round(), color);
+        addRect(CBox{B.x + x, B.y + B.h - T, std::min(D, B.w - x), T}.round(), color);
+    }
+    for (double y = 0; y < B.h; y += STEP) {
+        addRect(CBox{B.x, B.y + y, T, std::min(D, B.h - y)}.round(), color);
+        addRect(CBox{B.x + B.w - T, B.y + y, T, std::min(D, B.h - y)}.round(), color);
+    }
 }
 
 void COverview::render(const Time::steady_tp& now) {
@@ -302,9 +468,17 @@ void COverview::render(const Time::steady_tp& now) {
     const auto V = view();
     const auto P = m_progress->value();
 
+    for (auto& [id, shown] : m_panShown) {
+        const auto TARGET = m_pan[id];
+        shown             = std::abs(TARGET - shown) < 0.5 ? TARGET : shown + (TARGET - shown) * 0.25;
+    }
+    for (const auto& [id, target] : m_pan) {
+        m_panShown.try_emplace(id, 0.0);
+    }
+
     g_pHyprRenderer->renderBackground(MONITOR);
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM}, now);
-    addRect({{0, 0}, MONITOR->m_pixelSize}, withAlpha(g_config.backdrop->value(), P));
+    addRect({{0, 0}, MONITOR->m_pixelSize}, withAlpha(g_config.backdrop->value(), P), 0, g_config.backdropBlur->value() && P > 0.F, P);
 
     m_hitboxes.clear();
     for (size_t i = 0; i < m_rows.size(); ++i) {
@@ -313,21 +487,22 @@ void COverview::render(const Time::steady_tp& now) {
     }
 
     if (!m_closing)
-        renderOutline({rowOrigin(V, m_rows.size()), MONITOR->m_size * V.scale}, withAlpha(g_config.frame->value(), P * 0.5F), 2.0);
+        renderNewSlot(V);
 
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
-        const auto W      = m_drag.window.lock();
-        const auto ORIGIN = rowOrigin(V, m_drag.row) + m_drag.delta;
-        pushModif(V.scale, ORIGIN * MONITOR->m_scale);
-        g_pHyprRenderer->renderWindow(W, MONITOR, now, true, RENDER_PASS_ALL);
+        const auto TARGET = rowAt(m_cursor);
+        if (TARGET != m_drag.row && TARGET < (int)m_rows.size())
+            renderOutline({rowOrigin(V, TARGET), MONITOR->m_size * V.scale}, withAlpha(g_config.accent->value(), P), 3.0);
+
+        renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
         popModif();
     }
 
-    if (m_hovered && P > 0.5F && !m_drag.moving) {
-        for (const auto& hb : m_hitboxes) {
-            if (hb.window == m_hovered)
-                renderOutline(hb.box, withAlpha(g_config.hover->value(), P), 3.0);
-        }
+    for (const auto& hb : m_hitboxes) {
+        if (m_focus && hb.window == m_focus && !m_drag.moving)
+            renderOutline(hb.box, withAlpha(g_config.focus->value(), P), 2.0);
+        if (m_hovered && hb.window == m_hovered && P > 0.5F && !m_drag.moving)
+            renderOutline(hb.box, withAlpha(g_config.hover->value(), P), 3.0);
     }
 
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_TOP, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY}, now);
@@ -446,8 +621,12 @@ void COverview::onAxis(const IPointer::SAxisEvent& e, Event::SCallbackInfo& info
 
     info.cancelled = true;
 
-    if (e.axis != WL_POINTER_AXIS_VERTICAL_SCROLL)
+    if (e.axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+        const auto ROW = rowAt(m_cursor) < (int)m_rows.size() ? rowAt(m_cursor) : selectedRow();
+        if (ROW >= 0)
+            panBy(ROW, e.delta / view().scale);
         return;
+    }
 
     if (e.source == WL_POINTER_AXIS_SOURCE_WHEEL) {
         select(selectedRow() + (e.delta > 0 ? 1 : -1));
@@ -479,6 +658,8 @@ void COverview::onKey(const IKeyboard::SKeyEvent& e, Event::SCallbackInfo& info)
         case KEY_SPACE: closeToSelection(); break;
         case KEY_UP: select(selectedRow() - 1); break;
         case KEY_DOWN: select(selectedRow() + 1); break;
+        case KEY_LEFT: focusColumn(-1); break;
+        case KEY_RIGHT: focusColumn(1); break;
         default: return;
     }
 
@@ -520,7 +701,8 @@ void COverview::close(PHLWORKSPACE target, PHLWINDOW focus) {
 }
 
 void COverview::closeToSelection() {
-    close(m_selected.lock());
+    const auto FOCUS = m_focus.lock();
+    close(m_selected.lock(), FOCUS && FOCUS->m_workspace == m_selected ? FOCUS : nullptr);
 }
 
 void COverview::abort() {

@@ -52,10 +52,12 @@ then `hyprctl eval 'hl.plugin.hyprzoom.toggle()'`.
 |---|---|
 | pinch in / pinch out | zoom out / back in, following the fingers |
 | `↑` `↓`, scroll | select the workspace above or below |
+| `←` `→` | select the column left or right; the row pans to keep it in view |
+| sideways scroll | pan the row under the cursor |
 | click a window | go to it |
 | click a workspace | go to it |
 | drag a window onto a workspace | move it there; the outline below the last one makes a new workspace |
-| `Enter`, `Space` | go to the selected workspace |
+| `Enter`, `Space` | go to the selected window |
 | `Esc` | go back to where the overview was opened |
 
 Your keybinds keep working while it is open: switching workspace moves the
@@ -82,9 +84,14 @@ Under `plugin.hyprzoom`:
 |---|---|---|
 | `zoom` | `0.4` | size of a workspace when fully zoomed out |
 | `gap` | `40` | pixels between workspaces when zoomed out |
-| `backdrop_color` | `0xCC000000` | laid over the wallpaper behind the workspaces |
-| `frame_color` | `0x33FFFFFF` | outline of the part of each workspace the monitor shows |
-| `selected_color` | `0xCCFFFFFF` | outline of the selected workspace |
+| `backdrop_color` | `0x80000000` | laid over the wallpaper behind the workspaces |
+| `backdrop_blur` | `1` | blur the wallpaper behind the workspaces, with your `decoration.blur` settings |
+| `lane_color` | `0x99282136` | band behind each workspace's row |
+| `frame_color` | `0x2EFFFFFF` | outline of the part of each workspace the monitor shows |
+| `accent_color` | `0xFFCB6FA1` | selected workspace's label and the drop target |
+| `label_color` | `0xFF1A1623` | workspace label background |
+| `label_text_color` | `0xFFABB2BF` | workspace label text |
+| `focus_color` | `0x73FFFFFF` | outline of the window `Enter` goes to |
 | `hover_color` | `0xFFFFFFFF` | outline of the window under the cursor |
 | `gesture_distance` | `300` | gesture travel that zooms all the way out |
 
