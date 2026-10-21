@@ -76,7 +76,7 @@ spawn() {
 active_ws() { h activeworkspace -j | jq -r .id; }
 active_class() { h activewindow -j | jq -r .class; }
 
-LIBSEAT_BACKEND=noop AQ_DRM_DEVICES=/dev/dri/card0 Hyprland --config "$HERE/hyprland.lua" >"$OUT/hyprland.log" 2>&1 &
+LIBSEAT_BACKEND=noop AQ_DRM_DEVICES=$CARD Hyprland --config "$HERE/hyprland.lua" >"$OUT/hyprland.log" 2>&1 &
 HYPRLAND=$!
 finish() {
     {

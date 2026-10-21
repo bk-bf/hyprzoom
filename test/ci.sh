@@ -7,8 +7,8 @@ pacman -Syyuu --noconfirm --noprogressbar --needed hyprland pango libinput foot 
 cd "$(dirname "$0")/.."
 make hyprzoom.so test/driver.so
 
-chmod 666 /dev/dri/card0
+chmod 666 "$CARD"
 useradd -m tester
 install -d -o tester -m 700 /run/user/1000
 chown -R tester .
-su tester -c "XDG_RUNTIME_DIR=/run/user/1000 OUT=$PWD/out test/run.sh"
+su tester -c "CARD=$CARD XDG_RUNTIME_DIR=/run/user/1000 OUT=$PWD/out test/run.sh"

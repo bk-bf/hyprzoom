@@ -35,7 +35,7 @@ jobs:
           done
           grep -q CARD= "$GITHUB_ENV" || echo "CARD=$(ls /dev/dri/card* | head -1)" >> "$GITHUB_ENV"
       - name: Run headless Hyprland 0.56.2 with the overview
-        run: docker run --rm --device "$CARD:/dev/dri/card0" -v "$PWD:/src" -w /src archlinux:base-devel-20261004.0.606936 test/ci.sh
+        run: docker run --rm --device "$CARD" -e CARD -v "$PWD:/src" -w /src archlinux:base-devel-20261004.0.606936 test/ci.sh
       - if: always()
         run: |
           sudo chown -R "$USER" out
