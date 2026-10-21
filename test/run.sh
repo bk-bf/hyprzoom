@@ -260,4 +260,22 @@ sleep 0.5
 shot 12-same-workspace
 check "Enter on another window of the same workspace keeps it focused" ws4-left "$(active_class)"
 
+dispatch "hl.dsp.focus({ window = 'class:ws4-right' })"
+sleep 1
+ev "hl.plugin.driver.move(720, 450)"
+ev "hl.plugin.hyprzoom.toggle()"
+sleep 1
+key $KEY_LEFT
+sleep 1
+ev "hl.plugin.driver.move(560, 450)"
+sleep 0.3
+shot 13-click-target
+ev "hl.plugin.driver.button(272, true)"
+ev "hl.plugin.driver.button(272, false)"
+sleep 1.5
+ev "hl.plugin.driver.move(564, 452)"
+sleep 0.5
+shot 13-clicked
+check "clicking another window of the same workspace keeps it focused" ws4-left "$(active_class)"
+
 exit $((failures > 0))
