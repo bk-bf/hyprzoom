@@ -113,6 +113,8 @@ dispatch "hl.dsp.focus({ workspace = '1' })"
 sleep 1
 
 
+check "windows sit below the reserved bar area" "[0,30] [1440,870]" "$(h clients -j | jq -r '.[] | select(.class == "ws4-left") | "\(.at | tojson) \(.size | tojson)"')"
+
 shot 00-desktop
 
 record
