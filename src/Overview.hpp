@@ -108,6 +108,7 @@ class COverview {
     std::vector<std::pair<double, double>>                columnsOf(PHLWORKSPACE ws, PHLWINDOW skip) const;
     static int                                            insertIndex(const std::vector<std::pair<double, double>>& columns, double localX);
     void                                                  placeColumn(PHLWINDOW window, int index);
+    void                                                  scrollIntoView(PHLWINDOW window);
     SDropTarget                                           dropTarget() const;
     void                                                  dropOnto(PHLWINDOW window, PHLWINDOW onto, SDropTarget::eSide side);
     void                                                  renderRing(const CBox& logical);

@@ -810,6 +810,19 @@ int COverview::insertIndex(const std::vector<std::pair<double, double>>& columns
     return (int)std::ranges::count_if(columns, [localX](const auto& c) { return (c.first + c.second) / 2.0 < localX; });
 }
 
+void COverview::scrollIntoView(PHLWINDOW window) {
+    if (!window->m_workspace || !window->m_workspace->m_space || !window->m_workspace->m_space->algorithm())
+        return;
+
+    const auto ALGO  = dynamic_cast<Layout::Tiled::CScrollingAlgorithm*>(window->m_workspace->m_space->algorithm()->tiledAlgo().get());
+    const auto TDATA = ALGO ? ALGO->dataFor(window->layoutTarget()) : nullptr;
+    if (!TDATA)
+        return;
+
+    ALGO->m_scrollingData->centerOrFitCol(TDATA->column.lock());
+    ALGO->m_scrollingData->recalculate();
+}
+
 void COverview::placeColumn(PHLWINDOW window, int index) {
     if (!window->m_workspace || !window->m_workspace->m_space || !window->m_workspace->m_space->algorithm())
         return;
@@ -1003,8 +1016,10 @@ void COverview::close(PHLWORKSPACE target, PHLWINDOW focus) {
     showAllRows();
     *m_camera = (float)std::max(0, selectedRow());
 
-    if (focus)
+    if (focus) {
         Desktop::focusState()->fullWindowFocus(focus, Desktop::FOCUS_REASON_CLICK);
+        scrollIntoView(focus);
+    }
 
     if (m_progress->value() <= 0.001F) {
         g_pEventLoopManager->doLater([] { g_pOverview.reset(); });
