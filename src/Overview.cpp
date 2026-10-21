@@ -983,6 +983,11 @@ void COverview::close(PHLWORKSPACE target, PHLWINDOW focus) {
 
     Log::logger->log(Log::DEBUG, "[hyprzoom] close to workspace {}, focus {}", target ? target->m_id : WORKSPACE_INVALID, focus ? focus->m_title : "none");
 
+    g_lastClose = std::chrono::steady_clock::now();
+    traceFocus(std::format("close to workspace {} focus {} '{}' from workspace {} active {}", target ? target->m_id : WORKSPACE_INVALID, focus ? focus->m_class : "none",
+                           focus ? focus->m_title.substr(0, 40) : "", m_monitor->activeWorkspaceID(),
+                           Desktop::focusState()->window() ? Desktop::focusState()->window()->m_class : "none"));
+
     m_closing   = true;
     m_gesturing = false;
     m_hovered.reset();
