@@ -75,6 +75,28 @@ spawn() {
     wait_for "h clients -j | jq -e '.[] | select(.class == \"$cls\")' >/dev/null"
 }
 
+point() {
+    h clients -j | jq -r --arg c "$1" --argjson fx "$2" --argjson fy "$3" \
+        '.[] | select(.class == $c) | "\(432 + (.at[0] + .size[0] * (1 + $fx) / 2) * 0.4) \(270 + (.at[1] + .size[1] * (1 + $fy) / 2) * 0.4)"'
+}
+
+drag() {
+    local step=$1 from to
+    read -r -a from <<<"$(point "$2" 0 0)"
+    read -r -a to <<<"$(point "$3" "$4" "$5")"
+    ev "hl.plugin.driver.move(${from[0]}, ${from[1]})"
+    ev "hl.plugin.driver.button(272, true)"
+    ev "hl.plugin.driver.move($(((${from%.*} + ${to%.*}) / 2)), ${from[1]})"
+    ev "hl.plugin.driver.move(${to[0]}, ${to[1]})"
+    sleep 0.5
+    shot "$step-dragging"
+    ev "hl.plugin.driver.button(272, false)"
+    sleep 1.5
+    shot "$step-dropped"
+}
+
+order_x() { h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map("\(.class) \(.size[0])") | join(" ")'; }
+
 active_ws() { h activeworkspace -j | jq -r .id; }
 active_class() { h activewindow -j | jq -r .class; }
 
@@ -198,39 +220,15 @@ key $KEY_DOWN
 sleep 0.3
 key $KEY_DOWN
 sleep 1
-ev "hl.plugin.driver.move(1200, 450)"
-ev "hl.plugin.driver.button(272, true)"
-ev "hl.plugin.driver.move(1000, 450)"
-ev "hl.plugin.driver.move(460, 450)"
-sleep 0.5
-shot 08-dragging
-ev "hl.plugin.driver.button(272, false)"
-sleep 1.5
-shot 09-dropped
-check "dropping ws4-right left of ws4-left reorders the strip" "ws4-right ws4-left" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map(.class) | join(" ")')"
+drag 08 ws4-right ws4-left -0.8 0
+check "dropping on a window's left zone puts the dragged one beside it, half width each" "ws4-right 720 ws4-left 720" "$(order_x)"
 
-ev "hl.plugin.driver.move(720, 400)"
-ev "hl.plugin.driver.button(272, true)"
-ev "hl.plugin.driver.move(900, 400)"
-ev "hl.plugin.driver.move(1296, 580)"
-sleep 0.5
-shot 09b-stacking
-ev "hl.plugin.driver.button(272, false)"
-sleep 1.5
-shot 09c-stacked
-check "dropping ws4-right on the lower half of ws4-left stacks it below" "ws4-left ws4-right" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[1]) | map(.class) | join(" ")')"
+drag 09 ws4-right ws4-left 0 0.7
+check "dropping on a window's bottom zone stacks the dragged one below it" "ws4-left ws4-right" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[1]) | map(.class) | join(" ")')"
 check "the stacked windows share a column" 1 "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4) | .at[0]] | unique | length')"
 
-ev "hl.plugin.driver.move(720, 580)"
-ev "hl.plugin.driver.button(272, true)"
-ev "hl.plugin.driver.move(800, 480)"
-ev "hl.plugin.driver.move(990, 370)"
-sleep 0.5
-shot 09d-splitting
-ev "hl.plugin.driver.button(272, false)"
-sleep 1.5
-shot 09e-split
-check "dropping on the right zone puts the windows side by side at half width" "ws4-left 720 ws4-right 720" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map("\(.class) \(.size[0])") | join(" ")')"
+drag 10 ws4-right ws4-left 0.8 0
+check "dropping on a window's right zone splits its column's width" "ws4-left 360 ws4-right 360" "$(order_x)"
 key $KEY_ESC
 sleep 1
 
@@ -244,7 +242,7 @@ key $KEY_RIGHT
 sleep 0.5
 key $KEY_ENTER
 sleep 1.5
-shot 10-entered
+shot 11-entered
 h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
 check "Enter goes to the selected window" ws4-right "$(active_class)"
