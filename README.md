@@ -12,7 +12,11 @@ Hyprland it was built for, so rebuild it after every Hyprland update.
 
 ```sh
 make
+make install
 ```
+
+`make install` puts it at `~/.local/lib/hyprzoom/hyprzoom.so`; set `PREFIX`
+for somewhere else.
 
 Needs the Hyprland headers (`pkg-config --modversion hyprland` must print the
 running version) and `pango`, `libinput`, `libdrm`, `pixman`.
@@ -22,7 +26,7 @@ running version) and `pango`, `libinput`, `libdrm`, `pixman`.
 In a Lua config (`hyprland.lua`):
 
 ```lua
-hl.plugin.load("/path/to/hyprzoom.so")
+hl.plugin.load(os.getenv("HOME") .. "/.local/lib/hyprzoom/hyprzoom.so")
 
 hl.config({
     plugin = {
