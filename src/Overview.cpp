@@ -351,8 +351,7 @@ void COverview::renderOutline(const CBox& logical, const CHyprColor& color, doub
 
 void COverview::renderWindowAt(PHLWINDOW window, const Vector2D& origin, float scale, const Time::steady_tp& now) {
     const auto MONITOR = m_monitor.lock();
-    const auto BOX     = window->getFullWindowBoundingBox();
-    const auto LOCAL   = BOX.pos() - MONITOR->m_position;
+    const auto LOCAL   = window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT) - MONITOR->m_position;
     const auto SHIFT   = origin + LOCAL * scale - LOCAL;
     const auto SAVED   = window->m_floatingOffset;
 
