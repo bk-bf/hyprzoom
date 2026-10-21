@@ -10,7 +10,6 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/render/Texture.hpp>
 
-#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -152,9 +151,7 @@ class COverview {
     CHyprSignalListener                                   m_swipeEnd;
 };
 
-inline UP<COverview>                         g_pOverview;
-inline std::chrono::steady_clock::time_point g_lastClose;
+inline UP<COverview> g_pOverview;
 
-void                                         traceFocus(const std::string& line);
 
-bool                                         isZoomSwipe(uint32_t fingers);
+bool                 isZoomSwipe(uint32_t fingers);

@@ -6,7 +6,6 @@
 #include "ZoomGesture.hpp"
 
 #include <lua.hpp>
-#include <fstream>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 
@@ -32,13 +31,7 @@ struct SRegisteredGesture {
 
 static std::vector<SRegisteredGesture> g_gestures;
 
-void                                   traceFocus(const std::string& line) {
-    const auto    MS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - g_lastClose).count();
-    std::ofstream trace(std::string{getenv("XDG_RUNTIME_DIR")} + "/hyprzoom-trace.log", std::ios::app);
-    trace << std::format("+{}ms {} cursor {}\n", MS, line, g_pInputManager->getMouseCoordsInternal());
-}
-
-bool isZoomSwipe(uint32_t fingers) {
+bool                                   isZoomSwipe(uint32_t fingers) {
     return std::ranges::any_of(g_gestures, [fingers](const auto& g) {
         return g.fingers == fingers &&
             (g.direction == TRACKPAD_GESTURE_DIR_UP || g.direction == TRACKPAD_GESTURE_DIR_DOWN || g.direction == TRACKPAD_GESTURE_DIR_VERTICAL ||
@@ -152,14 +145,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     static auto PRERENDER = Event::bus()->m_events.render.pre.listen([](PHLMONITOR monitor) {
         if (g_pOverview)
             g_pOverview->onPreRender(monitor);
-    });
-
-    static auto ACTIVE = Event::bus()->m_events.window.active.listen([](PHLWINDOW w, Desktop::eFocusReason reason) {
-        if (std::chrono::steady_clock::now() - g_lastClose > std::chrono::seconds(3))
-            return;
-        traceFocus(w ? std::format("focus {} '{}' reason {} pos {} size {}", w->m_class, w->m_title.substr(0, 40), (int)reason,
-                                   w->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT), w->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT)) :
-                       std::format("focus none reason {}", (int)reason));
     });
 
     static auto PRERELOAD = Event::bus()->m_events.config.preReload.listen([] { g_gestures.clear(); });
