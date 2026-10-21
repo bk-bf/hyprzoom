@@ -69,9 +69,9 @@ frames() {
 record() { ev "hl.plugin.driver.record()"; }
 
 spawn() {
-    local ws=$1 cls=$2 color=$3
+    local ws=$1 cls=$2 color=$3 alpha=${4:-1.0}
     dispatch "hl.dsp.focus({ workspace = '$ws' })"
-    dispatch "hl.dsp.exec_cmd([[foot -a $cls -o colors-dark.background=$color -o main.font=monospace:size=28 sh -c 'echo $cls; exec sleep 3600']])"
+    dispatch "hl.dsp.exec_cmd([[foot -a $cls -o colors-dark.background=$color -o colors-dark.alpha=$alpha -o main.font=monospace:size=28 sh -c 'echo $cls; exec sleep 3600']])"
     wait_for "h clients -j | jq -e '.[] | select(.class == \"$cls\")' >/dev/null"
 }
 
@@ -126,10 +126,10 @@ h plugin load "$ROOT/hyprzoom.so"
 h plugin load "$HERE/driver.so"
 ev 'hl.plugin.hyprzoom.gesture({ fingers = 4, direction = "up" })'
 
-spawn 1 ws1 1d3557
+spawn 1 ws1 1d3557 0.7
 spawn 3 ws3 2a6f4e
 spawn 4 ws4-left 5b2a86
-spawn 4 ws4-right b5651d
+spawn 4 ws4-right b5651d 0.7
 spawn 5 ws5 7a1f3d
 dispatch "hl.dsp.focus({ window = 'class:ws4-left' })"
 dispatch "hl.dsp.focus({ workspace = '1' })"
