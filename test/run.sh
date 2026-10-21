@@ -221,14 +221,14 @@ sleep 0.3
 key $KEY_DOWN
 sleep 1
 drag 08 ws4-right ws4-left -0.8 0
-check "dropping on a window's left zone puts the dragged one beside it, half width each" "ws4-right 720 ws4-left 720" "$(order_x)"
+check "dropping on a window's left zone makes the dragged one its own column left of it, widths unchanged" "ws4-right 1440 ws4-left 1440" "$(order_x)"
 
 drag 09 ws4-right ws4-left 0 0.7
 check "dropping on a window's bottom zone stacks the dragged one below it" "ws4-left ws4-right" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[1]) | map(.class) | join(" ")')"
 check "the stacked windows share a column" 1 "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4) | .at[0]] | unique | length')"
 
 drag 10 ws4-right ws4-left 0.8 0
-check "dropping on a window's right zone splits its column's width" "ws4-left 360 ws4-right 360" "$(order_x)"
+check "dropping on a window's right zone makes the dragged one its own column right of it, widths unchanged" "ws4-left 1440 ws4-right 1440" "$(order_x)"
 key $KEY_ESC
 sleep 1
 

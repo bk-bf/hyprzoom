@@ -352,7 +352,9 @@ void COverview::renderOutline(const CBox& logical, const CHyprColor& color, doub
 void COverview::renderWindowAt(PHLWINDOW window, const Vector2D& origin, float scale, const Time::steady_tp& now) {
     const auto MONITOR = m_monitor.lock();
     const auto LOCAL   = window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT) - MONITOR->m_position;
-    const auto SHIFT   = origin + LOCAL * scale - LOCAL;
+    const auto SIZE    = window->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+    const auto FINAL   = origin + LOCAL * scale;
+    const auto SHIFT   = Vector2D{std::clamp(FINAL.x, 0.0, std::max(0.0, MONITOR->m_size.x - SIZE.x)), std::clamp(FINAL.y, 0.0, std::max(0.0, MONITOR->m_size.y - SIZE.y))} - LOCAL;
     const auto SAVED   = window->m_floatingOffset;
 
     pushModif(scale, (origin - SHIFT * scale) * MONITOR->m_scale);
@@ -734,22 +736,6 @@ void COverview::dropOnto(PHLWINDOW window, PHLWINDOW onto, SDropTarget::eSide si
     if (SRC->targetDatas.size() == 1 && SRC != DST && DATA->idx(SRC) < at)
         --at;
     placeColumn(window, side == SDropTarget::SIDE_RIGHT ? at + 1 : at);
-
-    const auto NEWCOL = TDATA->column.lock();
-    if (!NEWCOL || NEWCOL == DST)
-        return;
-
-    auto&      dst                                     = DATA->controller->getStrip(DATA->idx(DST));
-    const auto WIDTH                                   = dst.size / 2.F;
-    dst.size                                           = WIDTH;
-    DATA->controller->getStrip(DATA->idx(NEWCOL)).size = WIDTH;
-
-    const auto LEFT  = side == SDropTarget::SIDE_RIGHT ? DST : NEWCOL;
-    const auto RIGHT = side == SDropTarget::SIDE_RIGHT ? NEWCOL : DST;
-    DATA->recalculate();
-    DATA->fitCol(RIGHT);
-    DATA->fitCol(LEFT);
-    DATA->recalculate();
 }
 
 int COverview::insertIndex(const std::vector<std::pair<double, double>>& columns, double localX) {
