@@ -29,6 +29,14 @@ struct SRegisteredGesture {
 
 static std::vector<SRegisteredGesture> g_gestures;
 
+bool                                   isZoomSwipe(uint32_t fingers) {
+    return std::ranges::any_of(g_gestures, [fingers](const auto& g) {
+        return g.fingers == fingers &&
+            (g.direction == TRACKPAD_GESTURE_DIR_UP || g.direction == TRACKPAD_GESTURE_DIR_DOWN || g.direction == TRACKPAD_GESTURE_DIR_VERTICAL ||
+             g.direction == TRACKPAD_GESTURE_DIR_SWIPE);
+    });
+}
+
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }

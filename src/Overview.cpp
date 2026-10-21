@@ -38,7 +38,6 @@ using namespace Render;
 constexpr double DRAG_THRESHOLD = 8.0;
 constexpr double AXIS_STEP      = 30.0;
 constexpr double SWIPE_LOCK     = 12.0;
-constexpr double STACK_ZONE     = 0.5;
 
 static void      damageOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable>) {
     if (g_pOverview && g_pOverview->m_monitor)
@@ -130,7 +129,7 @@ COverview::COverview(PHLMONITOR monitor, bool fromGesture) : m_monitor(monitor) 
     m_mouseButton = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent e, Event::SCallbackInfo& info) { onMouseButton(e, info); });
     m_mouseAxis   = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent e, Event::SCallbackInfo& info) { onAxis(e, info); });
     m_key         = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent e, Event::SCallbackInfo& info) { onKey(e, info); });
-    m_swipeBegin  = Event::bus()->m_events.gesture.swipe.begin.listen([this](IPointer::SSwipeBeginEvent, Event::SCallbackInfo& info) { onSwipeBegin(info); });
+    m_swipeBegin  = Event::bus()->m_events.gesture.swipe.begin.listen([this](IPointer::SSwipeBeginEvent e, Event::SCallbackInfo& info) { onSwipeBegin(e, info); });
     m_swipeUpdate = Event::bus()->m_events.gesture.swipe.update.listen([this](IPointer::SSwipeUpdateEvent e, Event::SCallbackInfo& info) { onSwipeUpdate(e, info); });
     m_swipeEnd    = Event::bus()->m_events.gesture.swipe.end.listen([this](IPointer::SSwipeEndEvent, Event::SCallbackInfo& info) { onSwipeEnd(info); });
 
@@ -510,8 +509,21 @@ void COverview::render(const Time::steady_tp& now) {
         const auto WIDTH = std::round(4 * MS);
         const auto COLOR = withAlpha(g_config.accent->value(), P);
         if (DROP.onto) {
-            const auto Y = (DROP.below ? DROP.box.y + DROP.box.h : DROP.box.y) * MS;
-            addRect(CBox{DROP.box.x * MS, Y - WIDTH / 2.0, DROP.box.w * MS, WIDTH}.round(), COLOR, WIDTH / 2);
+            auto half = DROP.box;
+            switch (DROP.side) {
+                case SDropTarget::SIDE_TOP: half.h /= 2.0; break;
+                case SDropTarget::SIDE_BOTTOM:
+                    half.h /= 2.0;
+                    half.y += half.h;
+                    break;
+                case SDropTarget::SIDE_LEFT: half.w /= 2.0; break;
+                case SDropTarget::SIDE_RIGHT:
+                    half.w /= 2.0;
+                    half.x += half.w;
+                    break;
+            }
+            addRect(half.copy().scale(MS).round(), withAlpha(g_config.accent->value(), P * 0.35F), std::round(6 * MS));
+            renderRing(half);
         } else if (DROP.row >= 0 && DROP.row < (int)m_rows.size()) {
             const auto STRIP = rowOrigin(V, DROP.row) - Vector2D{pan(DROP.row) * V.scale, 0.0};
             const auto COLS  = columnsOf(m_rows[DROP.row].lock(), m_drag.window.lock());
@@ -642,7 +654,7 @@ void COverview::drop() {
 
     if (W->m_workspace == target) {
         if (const auto ONTO = DROP.onto.lock(); ONTO && ONTO->m_workspace == target)
-            stackOnto(W, ONTO, DROP.below);
+            dropOnto(W, ONTO, DROP.side);
         else if (DROP.column >= 0)
             placeColumn(W, DROP.column);
     }
@@ -682,12 +694,11 @@ COverview::SDropTarget COverview::dropTarget() const {
         if (!W || W == DRAGGED || W->m_workspace != WS || W->m_isFloating || !hb.box.containsPoint(m_cursor))
             continue;
 
-        if (std::abs(m_cursor.x - hb.box.middle().x) < hb.box.w * STACK_ZONE / 2.0) {
-            target.onto  = W;
-            target.below = m_cursor.y > hb.box.middle().y;
-            target.box   = hb.box;
-            return target;
-        }
+        const auto D = (m_cursor - hb.box.middle()) / (hb.box.size() / 2.0);
+        target.onto  = W;
+        target.box   = hb.box;
+        target.side  = std::abs(D.x) > std::abs(D.y) ? (D.x < 0 ? SDropTarget::SIDE_LEFT : SDropTarget::SIDE_RIGHT) : (D.y < 0 ? SDropTarget::SIDE_TOP : SDropTarget::SIDE_BOTTOM);
+        return target;
     }
 
     const auto V     = view();
@@ -696,7 +707,7 @@ COverview::SDropTarget COverview::dropTarget() const {
     return target;
 }
 
-void COverview::stackOnto(PHLWINDOW window, PHLWINDOW onto, bool below) {
+void COverview::dropOnto(PHLWINDOW window, PHLWINDOW onto, SDropTarget::eSide side) {
     if (!window->m_workspace || !window->m_workspace->m_space || !window->m_workspace->m_space->algorithm())
         return;
 
@@ -704,19 +715,42 @@ void COverview::stackOnto(PHLWINDOW window, PHLWINDOW onto, bool below) {
     if (!ALGO)
         return;
 
-    const auto TDATA = ALGO->dataFor(window->layoutTarget());
-    const auto ODATA = ALGO->dataFor(onto->layoutTarget());
-    const auto SRC   = TDATA ? TDATA->column.lock() : nullptr;
-    const auto DST   = ODATA ? ODATA->column.lock() : nullptr;
+    const auto& DATA  = ALGO->m_scrollingData;
+    const auto  TDATA = ALGO->dataFor(window->layoutTarget());
+    const auto  ODATA = ALGO->dataFor(onto->layoutTarget());
+    const auto  SRC   = TDATA ? TDATA->column.lock() : nullptr;
+    const auto  DST   = ODATA ? ODATA->column.lock() : nullptr;
     if (!SRC || !DST)
         return;
 
-    SRC->remove(window->layoutTarget());
-    const int AT = (int)DST->idx(onto->layoutTarget());
-    DST->add(TDATA, below ? AT : AT - 1);
+    if (side == SDropTarget::SIDE_TOP || side == SDropTarget::SIDE_BOTTOM) {
+        SRC->remove(window->layoutTarget());
+        const int AT = (int)DST->idx(onto->layoutTarget());
+        DST->add(TDATA, side == SDropTarget::SIDE_BOTTOM ? AT : AT - 1);
+        DATA->recalculate();
+        return;
+    }
 
-    ALGO->m_scrollingData->recalculate();
-    Log::logger->log(Log::DEBUG, "[hyprzoom] stacked {} {} {}", window->m_title, below ? "below" : "above", onto->m_title);
+    int at = (int)DATA->idx(DST);
+    if (SRC->targetDatas.size() == 1 && SRC != DST && DATA->idx(SRC) < at)
+        --at;
+    placeColumn(window, side == SDropTarget::SIDE_RIGHT ? at + 1 : at);
+
+    const auto NEWCOL = TDATA->column.lock();
+    if (!NEWCOL || NEWCOL == DST)
+        return;
+
+    auto&      dst                                     = DATA->controller->getStrip(DATA->idx(DST));
+    const auto WIDTH                                   = dst.size / 2.F;
+    dst.size                                           = WIDTH;
+    DATA->controller->getStrip(DATA->idx(NEWCOL)).size = WIDTH;
+
+    const auto LEFT  = side == SDropTarget::SIDE_RIGHT ? DST : NEWCOL;
+    const auto RIGHT = side == SDropTarget::SIDE_RIGHT ? NEWCOL : DST;
+    DATA->recalculate();
+    DATA->fitCol(RIGHT);
+    DATA->fitCol(LEFT);
+    DATA->recalculate();
 }
 
 int COverview::insertIndex(const std::vector<std::pair<double, double>>& columns, double localX) {
@@ -769,16 +803,16 @@ void COverview::renderRing(const CBox& logical) {
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(data));
 }
 
-void COverview::onSwipeBegin(Event::SCallbackInfo& info) {
+void COverview::onSwipeBegin(const IPointer::SSwipeBeginEvent& e, Event::SCallbackInfo& info) {
     if (m_closing)
         return;
 
     info.cancelled = true;
-    m_swipe        = {};
+    m_swipe        = {.consuming = true, .zoom = isZoomSwipe(e.fingers)};
 }
 
 void COverview::onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& info) {
-    if (m_closing)
+    if (!m_swipe.consuming)
         return;
 
     info.cancelled = true;
@@ -789,6 +823,8 @@ void COverview::onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCall
             return;
         m_swipe.axis = std::abs(m_swipe.travel.x) > std::abs(m_swipe.travel.y) ? SSwipe::AXIS_X : SSwipe::AXIS_Y;
         m_swipe.row  = rowAt(m_cursor) < (int)m_rows.size() ? rowAt(m_cursor) : selectedRow();
+        if (m_swipe.zoom && m_swipe.axis == SSwipe::AXIS_Y)
+            gestureBegin();
     }
 
     const auto V = view();
@@ -798,20 +834,30 @@ void COverview::onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCall
         return;
     }
 
+    if (m_swipe.zoom) {
+        gestureUpdate(-e.delta.y / std::max<float>(1.F, g_config.gestureDistance->value()));
+        return;
+    }
+
     const auto LAST = std::max(0.0, (double)m_rows.size() - 1);
     m_camera->setValueAndWarp(std::clamp(m_camera->value() - e.delta.y / (V.pitch * V.scale), -0.5, LAST + 0.5));
 }
 
 void COverview::onSwipeEnd(Event::SCallbackInfo& info) {
-    if (m_closing)
+    if (!m_swipe.consuming)
         return;
 
-    info.cancelled = true;
+    info.cancelled   = true;
+    const auto SWIPE = m_swipe;
+    m_swipe          = {};
 
-    if (m_swipe.axis == SSwipe::AXIS_Y)
+    if (SWIPE.axis != SSwipe::AXIS_Y)
+        return;
+
+    if (SWIPE.zoom)
+        gestureEnd();
+    else
         select((int)std::lround(m_camera->value()));
-
-    m_swipe = {};
 }
 
 void COverview::onAxis(const IPointer::SAxisEvent& e, Event::SCallbackInfo& info) {

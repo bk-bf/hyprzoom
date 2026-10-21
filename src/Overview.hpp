@@ -46,10 +46,16 @@ class COverview {
         CBox         box;
     };
     struct SDropTarget {
+        enum eSide : uint8_t {
+            SIDE_TOP,
+            SIDE_BOTTOM,
+            SIDE_LEFT,
+            SIDE_RIGHT,
+        };
         int          row    = -1;
         int          column = -1;
         PHLWINDOWREF onto;
-        bool         below = false;
+        eSide        side = SIDE_TOP;
         CBox         box;
     };
 
@@ -59,6 +65,8 @@ class COverview {
             AXIS_X,
             AXIS_Y,
         };
+        bool     consuming = false;
+        bool     zoom      = false;
         Vector2D travel;
         eAxis    axis = AXIS_NONE;
         int      row  = -1;
@@ -98,9 +106,9 @@ class COverview {
     static int                                            insertIndex(const std::vector<std::pair<double, double>>& columns, double localX);
     void                                                  placeColumn(PHLWINDOW window, int index);
     SDropTarget                                           dropTarget() const;
-    void                                                  stackOnto(PHLWINDOW window, PHLWINDOW onto, bool below);
+    void                                                  dropOnto(PHLWINDOW window, PHLWINDOW onto, SDropTarget::eSide side);
     void                                                  renderRing(const CBox& logical);
-    void                                                  onSwipeBegin(Event::SCallbackInfo& info);
+    void                                                  onSwipeBegin(const IPointer::SSwipeBeginEvent& e, Event::SCallbackInfo& info);
     void                                                  onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& info);
     void                                                  onSwipeEnd(Event::SCallbackInfo& info);
 
@@ -141,3 +149,5 @@ class COverview {
 };
 
 inline UP<COverview> g_pOverview;
+
+bool                 isZoomSwipe(uint32_t fingers);

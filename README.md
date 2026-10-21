@@ -48,7 +48,7 @@ hl.config({
 })
 
 if hl.plugin.hyprzoom then
-    hl.plugin.hyprzoom.gesture({ fingers = 4, direction = "pinch" })
+    hl.plugin.hyprzoom.gesture({ fingers = 4, direction = "up" })
     hl.bind("SUPER + TAB", function() hl.plugin.hyprzoom.toggle() end)
 end
 ```
@@ -70,8 +70,10 @@ then `hyprctl eval 'hl.plugin.hyprzoom.toggle()'`.
 | sideways scroll | pan the row under the cursor |
 | click a window | go to it |
 | click a workspace | go to it |
-| drag a window | drop it on the middle of a window to stack it above or below that window in its column, or near a column's edge to put it there as its own column, in any workspace; the slot below the last workspace makes a new one |
-| swipe (any number of fingers) | up and down moves between workspaces, sideways pans the row; your own swipe gestures wait until the overview closes |
+| drag a window onto a window | the top or bottom of it stacks the two in one column; the left or right of it puts them side by side, splitting its width; a translucent half shows where it lands |
+| drag a window into a gap | it becomes its own column there; the slot below the last workspace makes a new workspace |
+| swipe | up and down moves between workspaces, sideways pans the row; your own swipe gestures wait until the overview closes |
+| swipe with a `gesture` finger count | zooms in and out with the fingers, as when opening |
 | `Enter`, `Space` | go to the selected window |
 | `Esc` | go back to where the overview was opened |
 

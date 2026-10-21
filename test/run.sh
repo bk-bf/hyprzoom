@@ -102,6 +102,7 @@ swaybg -i "$OUT/wall.png" -m fill >/dev/null 2>&1 &
 
 h plugin load "$ROOT/hyprzoom.so"
 h plugin load "$HERE/driver.so"
+ev 'hl.plugin.hyprzoom.gesture({ fingers = 4, direction = "up" })'
 
 spawn 1 ws1 1d3557
 spawn 3 ws3 2a6f4e
@@ -157,6 +158,28 @@ sleep 1
 shot 06-closed
 check "Esc returns to the start workspace" 1 "$(active_ws)"
 
+ev "hl.plugin.driver.swipe(4, 0, -400)"
+sleep 1
+shot 06b-swipe-opened
+key $KEY_DOWN
+sleep 0.3
+key $KEY_ENTER
+sleep 1
+check "a 4-finger swipe up opens the overview" 3 "$(active_ws)"
+dispatch "hl.dsp.focus({ workspace = '1' })"
+sleep 0.5
+
+ev "hl.plugin.hyprzoom.toggle()"
+sleep 1
+ev "hl.plugin.driver.swipe(4, 0, 400)"
+sleep 1
+shot 06c-swipe-closed
+key $KEY_DOWN
+sleep 0.3
+key $KEY_ENTER
+sleep 1
+check "a 4-finger swipe down closes the overview" 1 "$(active_ws)"
+
 ev "hl.plugin.hyprzoom.toggle()"
 sleep 1
 ev "hl.plugin.driver.swipe(3, 0, -400)"
@@ -189,7 +212,7 @@ check "dropping ws4-right left of ws4-left reorders the strip" "ws4-right ws4-le
 ev "hl.plugin.driver.move(720, 400)"
 ev "hl.plugin.driver.button(272, true)"
 ev "hl.plugin.driver.move(900, 400)"
-ev "hl.plugin.driver.move(1180, 520)"
+ev "hl.plugin.driver.move(1296, 580)"
 sleep 0.5
 shot 09b-stacking
 ev "hl.plugin.driver.button(272, false)"
@@ -197,6 +220,17 @@ sleep 1.5
 shot 09c-stacked
 check "dropping ws4-right on the lower half of ws4-left stacks it below" "ws4-left ws4-right" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[1]) | map(.class) | join(" ")')"
 check "the stacked windows share a column" 1 "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4) | .at[0]] | unique | length')"
+
+ev "hl.plugin.driver.move(720, 580)"
+ev "hl.plugin.driver.button(272, true)"
+ev "hl.plugin.driver.move(800, 480)"
+ev "hl.plugin.driver.move(990, 370)"
+sleep 0.5
+shot 09d-splitting
+ev "hl.plugin.driver.button(272, false)"
+sleep 1.5
+shot 09e-split
+check "dropping on the right zone puts the windows side by side at half width" "ws4-left 720 ws4-right 720" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map("\(.class) \(.size[0])") | join(" ")')"
 key $KEY_ESC
 sleep 1
 
@@ -213,6 +247,6 @@ sleep 1.5
 shot 10-entered
 h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
-check "Enter goes to the selected window" ws4-left "$(active_class)"
+check "Enter goes to the selected window" ws4-right "$(active_class)"
 
 exit $((failures > 0))
