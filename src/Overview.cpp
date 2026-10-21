@@ -28,6 +28,7 @@
 #include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/layout/space/Space.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/layout/algorithm/Algorithm.hpp>
 #include <hyprland/src/layout/algorithm/tiled/scrolling/ScrollingAlgorithm.hpp>
 #undef private
@@ -38,6 +39,9 @@ using namespace Render;
 constexpr double DRAG_THRESHOLD = 8.0;
 constexpr double AXIS_STEP      = 30.0;
 constexpr double SWIPE_LOCK     = 12.0;
+constexpr size_t PILL_CHARS     = 60;
+constexpr size_t TEXT_CACHE     = 64;
+constexpr float  FULL_WIDTH     = 0.999F;
 
 static void      damageOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable>) {
     if (g_pOverview && g_pOverview->m_monitor)
@@ -402,18 +406,77 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
         g_pHyprRenderer->sendFrameEventsToWorkspace(MONITOR, WS, now);
 }
 
-SP<Render::ITexture> COverview::text(const std::string& str, int64_t color, int pt) {
-    const auto KEY = std::format("{}|{}|{}", str, color, pt);
-    auto&      tex = m_text[KEY];
+SP<Render::ITexture> COverview::text(const std::string& str, int64_t color, int pt, int weight) {
+    const auto KEY = std::format("{}|{}|{}|{}", str, color, pt, weight);
+    if (m_text.size() > TEXT_CACHE && !m_text.contains(KEY))
+        m_text.clear();
+
+    auto& tex = m_text[KEY];
     if (!tex)
-        tex = g_pHyprRenderer->renderText(str, CHyprColor{(uint64_t)color}, pt, false, "", 0, 600);
+        tex = g_pHyprRenderer->renderText(str, CHyprColor{(uint64_t)color}, pt, false, "", 0, weight);
     return tex;
+}
+
+void COverview::renderPill(const std::string& str, const CBox& anchor, int64_t border) {
+    const auto MS    = m_monitor->m_scale;
+    const auto P     = m_progress->value();
+    auto       label = str;
+    if (label.size() > PILL_CHARS) {
+        size_t cut = PILL_CHARS;
+        while (cut > 0 && ((unsigned char)label[cut] & 0xC0) == 0x80)
+            --cut;
+        label = label.substr(0, cut) + "…";
+    }
+
+    const auto TEX = text(label, g_config.labelText->value(), std::round(11 * MS), 400);
+    if (!TEX || label.empty() || P <= 0.F)
+        return;
+
+    const Vector2D PAD  = Vector2D{10, 4} * MS;
+    const Vector2D SIZE = TEX->m_size + PAD * 2;
+    const auto     TOP  = std::max(m_monitor->m_reservedArea.top() * MS, anchor.y * MS - 8 * MS - SIZE.y);
+    const CBox     PILL = CBox{anchor.middle().x * MS - SIZE.x / 2.0, TOP, SIZE.x, SIZE.y}.round();
+    const auto     LINE = std::max(1.0, (double)std::round(MS));
+
+    addRect(PILL.copy().expand(LINE), withAlpha(border, P), std::round(7 * MS + LINE));
+    addRect(PILL, withAlpha(g_config.label->value(), P), std::round(7 * MS));
+
+    CTexPassElement::SRenderData data;
+    data.tex = TEX;
+    data.box = CBox{PILL.pos() + PAD, TEX->m_size}.round();
+    data.a   = P;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
+}
+
+std::string COverview::dropBlocker(const SDropTarget& drop) const {
+    const auto ONTO    = drop.onto.lock();
+    const auto DRAGGED = m_drag.window.lock();
+
+    for (const auto& w : {DRAGGED, ONTO}) {
+        if (w && Fullscreen::controller()->isFullscreen(w))
+            return std::format("{} is fullscreen", w->m_class);
+    }
+
+    if (!ONTO || (drop.side != SDropTarget::SIDE_LEFT && drop.side != SDropTarget::SIDE_RIGHT) || !ONTO->m_workspace || !ONTO->m_workspace->m_space ||
+        !ONTO->m_workspace->m_space->algorithm())
+        return "";
+
+    const auto ALGO = dynamic_cast<Layout::Tiled::CScrollingAlgorithm*>(ONTO->m_workspace->m_space->algorithm()->tiledAlgo().get());
+    const auto DATA = ALGO ? ALGO->dataFor(ONTO->layoutTarget()) : nullptr;
+    const auto COL  = DATA ? DATA->column.lock() : nullptr;
+    if (!COL)
+        return "";
+
+    if (ALGO->m_scrollingData->controller->getStrip(ALGO->m_scrollingData->idx(COL)).size >= FULL_WIDTH)
+        return std::format("{} is full width, so this lands off-screen beside it", ONTO->m_class);
+
+    return "";
 }
 
 void COverview::renderLabel(const CBox& frame, const std::string& str, bool selected) {
     const auto MS  = m_monitor->m_scale;
     const auto P   = m_progress->value();
-    const auto TEX = text(str, selected ? g_config.label->value() : g_config.labelText->value(), std::round(13 * MS));
+    const auto TEX = text(str, selected ? g_config.label->value() : g_config.labelText->value(), std::round(13 * MS), 600);
     if (!TEX || P <= 0.F)
         return;
 
@@ -440,7 +503,7 @@ void COverview::renderNewSlot(const SView& v) {
     renderDashed(FRAME, withAlpha(COLOR, P * (DROP ? 1.F : 0.4F)), 2.0, 12.0, 8.0);
 
     const auto ZOOM = std::clamp((float)g_config.zoom->value(), 0.05F, 1.F);
-    const auto TEX  = text("+", COLOR, std::round(160 * ZOOM * MS));
+    const auto TEX  = text("+", COLOR, std::round(160 * ZOOM * MS), 600);
     if (!TEX)
         return;
 
@@ -525,6 +588,8 @@ void COverview::render(const Time::steady_tp& now) {
             }
             addRect(half.copy().scale(MS).round(), withAlpha(g_config.accent->value(), P * 0.35F), std::round(6 * MS));
             renderRing(half);
+            if (const auto BLOCKER = dropBlocker(DROP); !BLOCKER.empty())
+                renderPill(BLOCKER, half, g_config.accent->value());
         } else if (DROP.row >= 0 && DROP.row < (int)m_rows.size()) {
             const auto STRIP = rowOrigin(V, DROP.row) - Vector2D{pan(DROP.row) * V.scale, 0.0};
             const auto COLS  = columnsOf(m_rows[DROP.row].lock(), m_drag.window.lock());
@@ -536,8 +601,11 @@ void COverview::render(const Time::steady_tp& now) {
 
     const auto RING = m_hovered ? m_hovered : m_focus;
     for (const auto& hb : m_hitboxes) {
-        if (RING && hb.window == RING && !m_drag.moving)
-            renderRing(hb.box);
+        if (!RING || hb.window != RING || m_drag.moving)
+            continue;
+        renderRing(hb.box);
+        if (P > 0.9F)
+            renderPill(RING->m_title, hb.box, g_config.frame->value());
     }
 
     renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_TOP, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY}, now);

@@ -100,7 +100,9 @@ class COverview {
     void                                                  renderNewSlot(const SView& v);
     void                                                  renderOutline(const CBox& logical, const CHyprColor& color, double width);
     void                                                  renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space);
-    SP<Render::ITexture>                                  text(const std::string& str, int64_t color, int pt);
+    SP<Render::ITexture>                                  text(const std::string& str, int64_t color, int pt, int weight);
+    void                                                  renderPill(const std::string& str, const CBox& anchor, int64_t border);
+    std::string                                           dropBlocker(const SDropTarget& drop) const;
     void                                                  drop();
     std::vector<std::pair<double, double>>                columnsOf(PHLWORKSPACE ws, PHLWINDOW skip) const;
     static int                                            insertIndex(const std::vector<std::pair<double, double>>& columns, double localX);
