@@ -247,4 +247,17 @@ h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
 check "Enter goes to the selected window" ws4-right "$(active_class)"
 
+ev "hl.plugin.driver.move(720, 450)"
+sleep 0.5
+ev "hl.plugin.hyprzoom.toggle()"
+sleep 1
+key $KEY_LEFT
+sleep 0.5
+key $KEY_ENTER
+sleep 1.5
+ev "hl.plugin.driver.move(724, 452)"
+sleep 0.5
+shot 12-same-workspace
+check "Enter on another window of the same workspace keeps it focused" ws4-left "$(active_class)"
+
 exit $((failures > 0))
