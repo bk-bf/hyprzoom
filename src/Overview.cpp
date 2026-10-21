@@ -504,8 +504,8 @@ void COverview::render(const Time::steady_tp& now) {
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
         {
             const auto DW = m_drag.window.lock();
-            Log::logger->log(Log::DEBUG, "[hyprzoom] drag {} row {} pos {} size {} full {} delta {} pan {} alpha {} ws {}", DW->m_class, m_drag.row,
-                             DW->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->getFullWindowBoundingBox(),
+            Log::logger->log(Log::DEBUG, "[hyprzoom] drag {} row {} pos {} size {} full {} {} delta {} pan {} alpha {} ws {}", DW->m_class, m_drag.row,
+                             DW->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->getFullWindowBoundingBox().pos(), DW->getFullWindowBoundingBox().size(),
                              m_drag.delta, pan(m_drag.row), DW->effectiveAlpha(), DW->m_workspace ? DW->m_workspace->m_id : -1);
         }
         renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
