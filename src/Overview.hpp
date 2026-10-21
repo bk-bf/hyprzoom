@@ -45,6 +45,14 @@ class COverview {
         PHLWINDOWREF window;
         CBox         box;
     };
+    struct SDropTarget {
+        int          row    = -1;
+        int          column = -1;
+        PHLWINDOWREF onto;
+        bool         below = false;
+        CBox         box;
+    };
+
     struct SSwipe {
         enum eAxis : uint8_t {
             AXIS_NONE,
@@ -89,6 +97,8 @@ class COverview {
     std::vector<std::pair<double, double>>                columnsOf(PHLWORKSPACE ws, PHLWINDOW skip) const;
     static int                                            insertIndex(const std::vector<std::pair<double, double>>& columns, double localX);
     void                                                  placeColumn(PHLWINDOW window, int index);
+    SDropTarget                                           dropTarget() const;
+    void                                                  stackOnto(PHLWINDOW window, PHLWINDOW onto, bool below);
     void                                                  renderRing(const CBox& logical);
     void                                                  onSwipeBegin(Event::SCallbackInfo& info);
     void                                                  onSwipeUpdate(const IPointer::SSwipeUpdateEvent& e, Event::SCallbackInfo& info);

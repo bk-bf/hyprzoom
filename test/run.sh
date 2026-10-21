@@ -185,6 +185,18 @@ ev "hl.plugin.driver.button(272, false)"
 sleep 1.5
 shot 09-dropped
 check "dropping ws4-right left of ws4-left reorders the strip" "ws4-right ws4-left" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[0]) | map(.class) | join(" ")')"
+
+ev "hl.plugin.driver.move(720, 400)"
+ev "hl.plugin.driver.button(272, true)"
+ev "hl.plugin.driver.move(900, 400)"
+ev "hl.plugin.driver.move(1180, 520)"
+sleep 0.5
+shot 09b-stacking
+ev "hl.plugin.driver.button(272, false)"
+sleep 1.5
+shot 09c-stacked
+check "dropping ws4-right on the lower half of ws4-left stacks it below" "ws4-left ws4-right" "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4)] | sort_by(.at[1]) | map(.class) | join(" ")')"
+check "the stacked windows share a column" 1 "$(h clients -j | jq -r '[.[] | select(.workspace.id == 4) | .at[0]] | unique | length')"
 key $KEY_ESC
 sleep 1
 
@@ -201,6 +213,6 @@ sleep 1.5
 shot 10-entered
 h clients -j | jq -c '.[] | {class, at, size}' >"$OUT/clients.json"
 check "Enter goes to the selected workspace" 4 "$(active_ws)"
-check "Enter focuses the selected column" ws4-left "$(active_class)"
+check "Enter goes to the selected window" ws4-left "$(active_class)"
 
 exit $((failures > 0))

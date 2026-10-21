@@ -38,6 +38,7 @@ using namespace Render;
 constexpr double DRAG_THRESHOLD = 8.0;
 constexpr double AXIS_STEP      = 30.0;
 constexpr double SWIPE_LOCK     = 12.0;
+constexpr double STACK_ZONE     = 0.5;
 
 static void      damageOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable>) {
     if (g_pOverview && g_pOverview->m_monitor)
@@ -504,17 +505,19 @@ void COverview::render(const Time::steady_tp& now) {
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
         renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
         popModif();
-        const auto TARGET = rowAt(m_cursor);
-        if (TARGET < (int)m_rows.size()) {
-            const auto WS    = m_rows[TARGET].lock();
-            const auto STRIP = rowOrigin(V, TARGET) - Vector2D{pan(TARGET) * V.scale, 0.0};
-            const auto COLS  = columnsOf(WS, m_drag.window.lock());
-            const auto INDEX = insertIndex(COLS, (m_cursor.x - STRIP.x) / V.scale);
-            const auto GAP   = COLS.empty() ? 0.0 : INDEX == 0 ? COLS.front().first : COLS[INDEX - 1].second;
-            const auto FRAME = frameBox(V, TARGET);
-            const auto MS    = MONITOR->m_scale;
-            const auto WIDTH = std::round(4 * MS);
-            addRect(CBox{(STRIP.x + GAP * V.scale) * MS - WIDTH / 2.0, FRAME.y * MS, WIDTH, FRAME.h * MS}.round(), withAlpha(g_config.accent->value(), P), WIDTH / 2);
+        const auto DROP  = dropTarget();
+        const auto MS    = MONITOR->m_scale;
+        const auto WIDTH = std::round(4 * MS);
+        const auto COLOR = withAlpha(g_config.accent->value(), P);
+        if (DROP.onto) {
+            const auto Y = (DROP.below ? DROP.box.y + DROP.box.h : DROP.box.y) * MS;
+            addRect(CBox{DROP.box.x * MS, Y - WIDTH / 2.0, DROP.box.w * MS, WIDTH}.round(), COLOR, WIDTH / 2);
+        } else if (DROP.row >= 0 && DROP.row < (int)m_rows.size()) {
+            const auto STRIP = rowOrigin(V, DROP.row) - Vector2D{pan(DROP.row) * V.scale, 0.0};
+            const auto COLS  = columnsOf(m_rows[DROP.row].lock(), m_drag.window.lock());
+            const auto GAP   = COLS.empty() ? 0.0 : DROP.column == 0 ? COLS.front().first : COLS[DROP.column - 1].second;
+            const auto FRAME = frameBox(V, DROP.row);
+            addRect(CBox{(STRIP.x + GAP * V.scale) * MS - WIDTH / 2.0, FRAME.y * MS, WIDTH, FRAME.h * MS}.round(), COLOR, WIDTH / 2);
         }
     }
 
@@ -627,12 +630,7 @@ void COverview::drop() {
     if (!target)
         return;
 
-    int index = -1;
-    if (ROW < (int)m_rows.size()) {
-        const auto V     = view();
-        const auto STRIP = rowOrigin(V, ROW) - Vector2D{pan(ROW) * V.scale, 0.0};
-        index            = insertIndex(columnsOf(target, W), (m_cursor.x - STRIP.x) / V.scale);
-    }
+    const auto DROP = dropTarget();
 
     if (target != W->m_workspace) {
         Log::logger->log(Log::DEBUG, "[hyprzoom] move {} to workspace {}", W->m_title, target->m_id);
@@ -642,8 +640,12 @@ void COverview::drop() {
             Log::logger->log(Log::ERR, "[hyprzoom] moving {} failed", W->m_title);
     }
 
-    if (index >= 0 && W->m_workspace == target)
-        placeColumn(W, index);
+    if (W->m_workspace == target) {
+        if (const auto ONTO = DROP.onto.lock(); ONTO && ONTO->m_workspace == target)
+            stackOnto(W, ONTO, DROP.below);
+        else if (DROP.column >= 0)
+            placeColumn(W, DROP.column);
+    }
 
     refreshRows();
     showAllRows();
@@ -665,6 +667,56 @@ std::vector<std::pair<double, double>> COverview::columnsOf(PHLWORKSPACE ws, PHL
 
     std::ranges::sort(columns);
     return columns;
+}
+
+COverview::SDropTarget COverview::dropTarget() const {
+    SDropTarget target{.row = rowAt(m_cursor)};
+    if (target.row >= (int)m_rows.size())
+        return target;
+
+    const auto WS      = m_rows[target.row].lock();
+    const auto DRAGGED = m_drag.window.lock();
+
+    for (const auto& hb : m_hitboxes) {
+        const auto W = hb.window.lock();
+        if (!W || W == DRAGGED || W->m_workspace != WS || W->m_isFloating || !hb.box.containsPoint(m_cursor))
+            continue;
+
+        if (std::abs(m_cursor.x - hb.box.middle().x) < hb.box.w * STACK_ZONE / 2.0) {
+            target.onto  = W;
+            target.below = m_cursor.y > hb.box.middle().y;
+            target.box   = hb.box;
+            return target;
+        }
+    }
+
+    const auto V     = view();
+    const auto STRIP = rowOrigin(V, target.row) - Vector2D{pan(target.row) * V.scale, 0.0};
+    target.column    = insertIndex(columnsOf(WS, DRAGGED), (m_cursor.x - STRIP.x) / V.scale);
+    return target;
+}
+
+void COverview::stackOnto(PHLWINDOW window, PHLWINDOW onto, bool below) {
+    if (!window->m_workspace || !window->m_workspace->m_space || !window->m_workspace->m_space->algorithm())
+        return;
+
+    const auto ALGO = dynamic_cast<Layout::Tiled::CScrollingAlgorithm*>(window->m_workspace->m_space->algorithm()->tiledAlgo().get());
+    if (!ALGO)
+        return;
+
+    const auto TDATA = ALGO->dataFor(window->layoutTarget());
+    const auto ODATA = ALGO->dataFor(onto->layoutTarget());
+    const auto SRC   = TDATA ? TDATA->column.lock() : nullptr;
+    const auto DST   = ODATA ? ODATA->column.lock() : nullptr;
+    if (!SRC || !DST)
+        return;
+
+    SRC->remove(window->layoutTarget());
+    const int AT = (int)DST->idx(onto->layoutTarget());
+    DST->add(TDATA, below ? AT : AT - 1);
+
+    ALGO->m_scrollingData->recalculate();
+    Log::logger->log(Log::DEBUG, "[hyprzoom] stacked {} {} {}", window->m_title, below ? "below" : "above", onto->m_title);
 }
 
 int COverview::insertIndex(const std::vector<std::pair<double, double>>& columns, double localX) {

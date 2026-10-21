@@ -70,7 +70,7 @@ then `hyprctl eval 'hl.plugin.hyprzoom.toggle()'`.
 | sideways scroll | pan the row under the cursor |
 | click a window | go to it |
 | click a workspace | go to it |
-| drag a window | drop it between columns of any workspace to put it there as its own column; the slot below the last workspace makes a new one |
+| drag a window | drop it on the middle of a window to stack it above or below that window in its column, or near a column's edge to put it there as its own column, in any workspace; the slot below the last workspace makes a new one |
 | swipe (any number of fingers) | up and down moves between workspaces, sideways pans the row; your own swipe gestures wait until the overview closes |
 | `Enter`, `Space` | go to the selected window |
 | `Esc` | go back to where the overview was opened |
