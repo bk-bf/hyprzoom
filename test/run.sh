@@ -143,7 +143,8 @@ record
 sleep 1
 frames idle
 
-ev "hl.plugin.driver.move(720, 450)"
+ev "hl.plugin.driver.move(600, 400)"
+ev "hl.plugin.driver.move(640, 420)"
 sleep 0.5
 shot 05-hover
 
