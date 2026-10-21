@@ -18,6 +18,16 @@ make install
 `make install` puts it at `~/.local/lib/hyprzoom/hyprzoom.so`; set `PREFIX`
 for somewhere else.
 
+To replace a loaded copy, unload it first, and load it by hand afterwards:
+Hyprland only reloads config plugins when the list of paths changes.
+
+```sh
+hyprctl plugin unload ~/.local/lib/hyprzoom/hyprzoom.so
+make install
+hyprctl plugin load ~/.local/lib/hyprzoom/hyprzoom.so
+hyprctl reload
+```
+
 Needs the Hyprland headers (`pkg-config --modversion hyprland` must print the
 running version) and `pango`, `libinput`, `libdrm`, `pixman`.
 
