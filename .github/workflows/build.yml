@@ -26,14 +26,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Load vkms for a virtual display
+      - name: Pick a KMS device, vkms where the kernel has it
         run: |
-          sudo modprobe vkms
+          sudo modprobe vkms || true
           for c in /sys/class/drm/card[0-9]; do
-            if readlink -f "$c/device" | grep -q vkms; then echo "VKMS=/dev/dri/$(basename "$c")" >> "$GITHUB_ENV"; fi
+            echo "$c $(readlink -f "$c/device")"
+            if readlink -f "$c/device" | grep -q vkms; then echo "CARD=/dev/dri/$(basename "$c")" >> "$GITHUB_ENV"; fi
           done
+          grep -q CARD= "$GITHUB_ENV" || echo "CARD=$(ls /dev/dri/card* | head -1)" >> "$GITHUB_ENV"
       - name: Run headless Hyprland 0.56.2 with the overview
-        run: docker run --rm --device "$VKMS:/dev/dri/card0" -v "$PWD:/src" -w /src archlinux:base-devel-20261004.0.606936 test/ci.sh
+        run: docker run --rm --device "$CARD:/dev/dri/card0" -v "$PWD:/src" -w /src archlinux:base-devel-20261004.0.606936 test/ci.sh
       - if: always()
         run: |
           sudo chown -R "$USER" out
