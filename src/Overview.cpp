@@ -353,7 +353,7 @@ void COverview::renderWindowAt(PHLWINDOW window, const Vector2D& origin, float s
     const auto MONITOR = m_monitor.lock();
     const auto BOX     = window->getFullWindowBoundingBox();
     const auto LOCAL   = BOX.pos() - MONITOR->m_position;
-    const auto SHIFT   = Vector2D{std::clamp(LOCAL.x, 0.0, std::max(0.0, MONITOR->m_size.x - BOX.w)), std::clamp(LOCAL.y, 0.0, std::max(0.0, MONITOR->m_size.y - BOX.h))} - LOCAL;
+    const auto SHIFT   = origin + LOCAL * scale - LOCAL;
     const auto SAVED   = window->m_floatingOffset;
 
     pushModif(scale, (origin - SHIFT * scale) * MONITOR->m_scale);
@@ -502,12 +502,6 @@ void COverview::render(const Time::steady_tp& now) {
         renderNewSlot(V);
 
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
-        {
-            const auto DW = m_drag.window.lock();
-            Log::logger->log(Log::DEBUG, "[hyprzoom] drag {} row {} pos {} size {} full {} {} delta {} pan {} alpha {} ws {}", DW->m_class, m_drag.row,
-                             DW->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT), DW->getFullWindowBoundingBox().pos(), DW->getFullWindowBoundingBox().size(),
-                             m_drag.delta, pan(m_drag.row), DW->effectiveAlpha(), DW->m_workspace ? DW->m_workspace->m_id : -1);
-        }
         renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
         popModif();
         const auto DROP  = dropTarget();
