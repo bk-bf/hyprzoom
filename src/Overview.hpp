@@ -56,6 +56,7 @@ class COverview {
     };
 
     SView                                                 view() const;
+    CBox                                                  frameBox(const SView& v, size_t row) const;
     Vector2D                                              rowOrigin(const SView& v, size_t row) const;
     int                                                   rowAt(const Vector2D& local) const;
     void                                                  refreshRows();

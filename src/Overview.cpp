@@ -313,6 +313,11 @@ COverview::SView COverview::view() const {
     return v;
 }
 
+CBox COverview::frameBox(const SView& v, size_t row) const {
+    const auto& R = m_monitor->m_reservedArea;
+    return {rowOrigin(v, row) + Vector2D{R.left(), R.top()} * v.scale, (m_monitor->m_size - Vector2D{R.left() + R.right(), R.top() + R.bottom()}) * v.scale};
+}
+
 Vector2D COverview::rowOrigin(const SView& v, size_t row) const {
     return v.origin + Vector2D{0.0, row * v.pitch * v.scale};
 }
@@ -354,7 +359,7 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
     const auto WS      = m_rows[row].lock();
     const auto ORIGIN  = rowOrigin(v, row);
     const auto STRIP   = ORIGIN - Vector2D{pan(row) * v.scale, 0.0};
-    const CBox FRAME   = {ORIGIN, MONITOR->m_size * v.scale};
+    const CBox FRAME   = frameBox(v, row);
     const auto P       = m_progress->value();
     const auto MS      = MONITOR->m_scale;
 
@@ -362,9 +367,6 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
         return;
 
     addRect(CBox{0.0, FRAME.y * MS, MONITOR->m_pixelSize.x, FRAME.h * MS}.round(), withAlpha(g_config.lane->value(), P));
-
-    pushModif(v.scale, ORIGIN * MS);
-    renderLayers(MONITOR, {ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND}, now);
 
     for (const bool FLOATING : {false, true}) {
         for (const auto& w : Desktop::windowState()->windows()) {
@@ -422,7 +424,7 @@ void COverview::renderLabel(const CBox& frame, const std::string& str, bool sele
 void COverview::renderNewSlot(const SView& v) {
     const auto MS    = m_monitor->m_scale;
     const auto P     = m_progress->value();
-    const CBox FRAME = {rowOrigin(v, m_rows.size()), m_monitor->m_size * v.scale};
+    const CBox FRAME = frameBox(v, m_rows.size());
     const bool DROP  = m_drag.moving && rowAt(m_cursor) >= (int)m_rows.size();
     const auto COLOR = DROP ? g_config.accent->value() : g_config.labelText->value();
 
@@ -494,7 +496,7 @@ void COverview::render(const Time::steady_tp& now) {
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
         const auto TARGET = rowAt(m_cursor);
         if (TARGET != m_drag.row && TARGET < (int)m_rows.size())
-            renderOutline({rowOrigin(V, TARGET), MONITOR->m_size * V.scale}, withAlpha(g_config.accent->value(), P), 3.0);
+            renderOutline(frameBox(V, TARGET), withAlpha(g_config.accent->value(), P), 3.0);
 
         renderWindowAt(m_drag.window.lock(), rowOrigin(V, m_drag.row) - Vector2D{pan(m_drag.row) * V.scale, 0.0} + m_drag.delta, V.scale, now);
         popModif();
