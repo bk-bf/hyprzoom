@@ -14,7 +14,10 @@ all: hyprzoom.so
 hyprzoom.so: $(SRC) $(wildcard src/*.hpp)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $(SRC) -o $@ `pkg-config --cflags $(DEPS)`
 
+test/driver.so: test/driver.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_FLAGS) $< -o $@ `pkg-config --cflags $(DEPS)`
+
 clean:
-	rm -f hyprzoom.so
+	rm -f hyprzoom.so test/driver.so
 
 .PHONY: all clean

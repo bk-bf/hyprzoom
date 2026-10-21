@@ -21,3 +21,25 @@ jobs:
         with:
           name: hyprzoom.so
           path: hyprzoom.so
+
+  visual:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Load vkms for a virtual display
+        run: |
+          sudo modprobe vkms
+          for c in /sys/class/drm/card[0-9]; do
+            if readlink -f "$c/device" | grep -q vkms; then echo "VKMS=/dev/dri/$(basename "$c")" >> "$GITHUB_ENV"; fi
+          done
+      - name: Run headless Hyprland 0.56.2 with the overview
+        run: docker run --rm --device "$VKMS:/dev/dri/card0" -v "$PWD:/src" -w /src archlinux:base-devel-20261004.0.606936 test/ci.sh
+      - if: always()
+        run: |
+          sudo chown -R "$USER" out
+          cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: visual
+          path: out
