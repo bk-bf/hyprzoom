@@ -103,9 +103,8 @@ Under `plugin.hyprzoom`:
 | `gap` | `40` | pixels between workspaces when zoomed out |
 | `backdrop_color` | `0x80000000` | laid over the wallpaper behind the workspaces |
 | `backdrop_blur` | `1` | blur the wallpaper behind the workspaces, with your `decoration.blur` settings |
-| `lane_color` | `0x99282136` | band behind each workspace's row |
-| `frame_color` | `0x2EFFFFFF` | outline of the part of each workspace the monitor shows |
-| `accent_color` | `0xFFCB6FA1` | selected workspace's label, the ring around the selected window, and where a dragged window will land |
+| `frame_color` | `0x2EFFFFFF` | border of the selected window's title |
+| `accent_color` | `0xFFCB6FA1` | selected workspace's label, and where a dragged window will land |
 | `label_color` | `0xFF1A1623` | workspace label background |
 | `label_text_color` | `0xFFABB2BF` | workspace label text |
 | `gesture_distance` | `300` | gesture travel that zooms all the way out |

@@ -10,9 +10,7 @@ struct SHyprzoomConfig {
     SP<Config::Values::CFloatValue> zoom;
     SP<Config::Values::CIntValue>   gap;
     SP<Config::Values::CColorValue> backdrop;
-    SP<Config::Values::CIntValue>   backdropBlur;
-    SP<Config::Values::CColorValue> lane;
-    SP<Config::Values::CColorValue> frame;
+    SP<Config::Values::CIntValue>   backdropBlur;    SP<Config::Values::CColorValue> frame;
     SP<Config::Values::CColorValue> accent;
     SP<Config::Values::CColorValue> label;
     SP<Config::Values::CColorValue> labelText;

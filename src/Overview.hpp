@@ -97,9 +97,7 @@ class COverview {
     void                                                  renderRow(const SView& v, size_t row, const Time::steady_tp& now);
     void                                                  renderWindowAt(PHLWINDOW window, const Vector2D& origin, float scale, const Time::steady_tp& now);
     void                                                  renderLabel(const CBox& frame, const std::string& text, bool selected);
-    void                                                  renderNewSlot(const SView& v);
-    void                                                  renderOutline(const CBox& logical, const CHyprColor& color, double width);
-    void                                                  renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space);
+    void                                                  renderNewSlot(const SView& v);    void                                                  renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space);
     SP<Render::ITexture>                                  text(const std::string& str, int64_t color, int pt, int weight);
     void                                                  renderPill(const std::string& str, const CBox& anchor, int64_t border);
     std::string                                           dropBlocker(const SDropTarget& drop) const;

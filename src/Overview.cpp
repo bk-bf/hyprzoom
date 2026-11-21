@@ -342,17 +342,6 @@ int COverview::rowAt(const Vector2D& local) const {
     return std::clamp(ROW, 0, (int)m_rows.size());
 }
 
-void COverview::renderOutline(const CBox& logical, const CHyprColor& color, double width) {
-    const auto S = m_monitor->m_scale;
-    const CBox B = logical.copy().scale(S).round();
-    const auto T = std::max(1.0, std::round(width * S));
-
-    addRect({B.x, B.y, B.w, T}, color);
-    addRect({B.x, B.y + B.h - T, B.w, T}, color);
-    addRect({B.x, B.y + T, T, B.h - 2 * T}, color);
-    addRect({B.x + B.w - T, B.y + T, T, B.h - 2 * T}, color);
-}
-
 void COverview::renderWindowAt(PHLWINDOW window, const Vector2D& origin, float scale, const Time::steady_tp& now) {
     const auto MONITOR = m_monitor.lock();
     const auto LOCAL   = window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT) - MONITOR->m_position;
@@ -373,13 +362,9 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
     const auto ORIGIN  = rowOrigin(v, row);
     const auto STRIP   = ORIGIN - Vector2D{pan(row) * v.scale, 0.0};
     const CBox FRAME   = frameBox(v, row);
-    const auto P       = m_progress->value();
-    const auto MS      = MONITOR->m_scale;
 
     if (FRAME.y > MONITOR->m_size.y || FRAME.y + FRAME.h < 0)
         return;
-
-    addRect(CBox{0.0, FRAME.y * MS, MONITOR->m_pixelSize.x, FRAME.h * MS}.round(), withAlpha(g_config.lane->value(), P));
 
     for (const bool FLOATING : {false, true}) {
         for (const auto& w : Desktop::windowState()->windows()) {
@@ -399,7 +384,6 @@ void COverview::renderRow(const SView& v, size_t row, const Time::steady_tp& now
 
     popModif();
 
-    renderOutline(FRAME, withAlpha(g_config.frame->value(), P), 1.5);
     renderLabel(FRAME, WS->m_name, (int)row == selectedRow());
 
     if (WS != MONITOR->m_activeWorkspace)
@@ -494,25 +478,12 @@ void COverview::renderLabel(const CBox& frame, const std::string& str, bool sele
 }
 
 void COverview::renderNewSlot(const SView& v) {
-    const auto MS    = m_monitor->m_scale;
     const auto P     = m_progress->value();
     const CBox FRAME = frameBox(v, m_rows.size());
     const bool DROP  = m_drag.moving && rowAt(m_cursor) >= (int)m_rows.size();
     const auto COLOR = DROP ? g_config.accent->value() : g_config.labelText->value();
 
     renderDashed(FRAME, withAlpha(COLOR, P * (DROP ? 1.F : 0.4F)), 2.0, 12.0, 8.0);
-
-    const auto ZOOM = std::clamp((float)g_config.zoom->value(), 0.05F, 1.F);
-    const auto TEX  = text("+", COLOR, std::round(160 * ZOOM * MS), 600);
-    if (!TEX)
-        return;
-
-    const auto                   SIZE = TEX->m_size * (v.scale / ZOOM);
-    CTexPassElement::SRenderData data;
-    data.tex = TEX;
-    data.box = CBox{FRAME.middle() * MS - SIZE / 2.0, SIZE}.round();
-    data.a   = P * (DROP ? 1.F : 0.4F);
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
 }
 
 void COverview::renderDashed(const CBox& logical, const CHyprColor& color, double width, double dash, double space) {
@@ -562,7 +533,7 @@ void COverview::render(const Time::steady_tp& now) {
             renderRow(V, i, now);
     }
 
-    if (!m_closing)
+    if (!m_closing && m_drag.moving)
         renderNewSlot(V);
 
     if (m_drag.moving && m_drag.window && m_drag.row >= 0) {
@@ -603,7 +574,6 @@ void COverview::render(const Time::steady_tp& now) {
     for (const auto& hb : m_hitboxes) {
         if (!RING || hb.window != RING || m_drag.moving)
             continue;
-        renderRing(hb.box);
         if (P > 0.9F)
             renderPill(RING->m_title, hb.box, g_config.frame->value());
     }
